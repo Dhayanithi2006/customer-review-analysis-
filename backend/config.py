@@ -37,7 +37,7 @@ WEIGHT_TIER: float = 0.15
 WEIGHT_RECENCY: float = 0.10
 
 # Gemini Settings
-GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 GEMINI_MAX_RETRIES: int = 2
 GEMINI_TIMEOUT_SECONDS: int = 60
 

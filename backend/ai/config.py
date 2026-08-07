@@ -1,7 +1,7 @@
 import os
 
 # Gemini Flash Model Configuration
-AI_MODEL_NAME: str = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+AI_MODEL_NAME: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 AI_MAX_RETRIES: int = 3
 AI_TIMEOUT_SECONDS: float = 45.0
 
