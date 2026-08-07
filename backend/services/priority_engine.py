@@ -69,7 +69,7 @@ class DecisionIntelligenceEngine(IPriorityEngine):
         sorted_clusters = sorted(clusters, key=lambda x: x.priority_score, reverse=True)
         for rank, cluster in enumerate(sorted_clusters, start=1):
             cluster.priority_rank = rank
-
+        logger.info(
             f"Priority engine calculation finished for session {session_id}: "
             f"{len(sorted_clusters)} issues ranked, total revenue risk = INR {total_revenue_risk:.2f}"
         )
