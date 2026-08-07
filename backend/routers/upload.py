@@ -1,6 +1,7 @@
 """
 Upload Router — Module 1
 POST /upload  →  ingests CSV, auto-detects columns, stores reviews, fires pipeline
+Phase 2: Accepts optional business_id to link session to a business workspace
 """
 import io
 import uuid
@@ -30,12 +31,37 @@ def _detect_column(headers: list[str], keywords: set[str], exclude: set[str] = N
     return None
 
 
+def _create_analysis_version(db, business_id: str, session_id: str) -> None:
+    """Create a version record linking this analysis run to a business."""
+    try:
+        existing = (
+            db.table("analysis_versions")
+            .select("version")
+            .eq("business_id", business_id)
+            .order("version", desc=True)
+            .limit(1)
+            .execute()
+            .data
+        )
+        next_version = (existing[0]["version"] + 1) if existing else 1
+        db.table("analysis_versions").insert({
+            "business_id": business_id,
+            "session_id":  session_id,
+            "version":     next_version,
+            "label":       f"Version {next_version}",
+            "status":      "pending",
+        }).execute()
+    except Exception:
+        pass  # Non-fatal — session still proceeds
+
+
 @router.post("")
 async def upload_csv(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     source: str = Form(...),
     team_size: str = Form(default="small_team"),
+    business_id: str = Form(default=None),  # Phase 2: link to business workspace
 ):
     # ── Validate file type ────────────────────────────────────────────────────
     if not file.filename.endswith(".csv"):
@@ -65,7 +91,6 @@ async def upload_csv(
     date_col   = _detect_column(headers, DATE_KEYWORDS, exclude={text_col, rating_col} - {None})
 
     if not text_col:
-        # Cannot proceed without a text column
         raise HTTPException(422, detail={
             "error": "Could not detect review text column.",
             "columns": headers,
@@ -79,20 +104,28 @@ async def upload_csv(
     if len(df) < 10:
         raise HTTPException(400, "Need at least 10 non-empty reviews.")
     if len(df) > MAX_REVIEWS:
-        df = df.head(MAX_REVIEWS)  # Silently cap
+        df = df.head(MAX_REVIEWS)
 
     # ── Create session ────────────────────────────────────────────────────────
     db = get_db()
     session_id = str(uuid.uuid4())
 
-    db.table("sessions").insert({
-        "id":           session_id,
-        "filename":     file.filename,
-        "source":       source,
-        "team_size":    team_size,
-        "status":       "pending",
+    session_row = {
+        "id":            session_id,
+        "filename":      file.filename,
+        "source":        source,
+        "team_size":     team_size,
+        "status":        "pending",
         "total_reviews": len(df),
-    }).execute()
+    }
+    if business_id:
+        session_row["business_id"] = business_id
+
+    db.table("sessions").insert(session_row).execute()
+
+    # ── Link session to business with version tracking ────────────────────────
+    if business_id:
+        _create_analysis_version(db, business_id, session_id)
 
     # ── Bulk-insert reviews ───────────────────────────────────────────────────
     rows = []
@@ -124,15 +157,15 @@ async def upload_csv(
             "review_date": rev_date,
         })
 
-    # Insert in batches of 500 to stay within Supabase limits
     for i in range(0, len(rows), 500):
         db.table("reviews").insert(rows[i:i+500]).execute()
 
-    # ── Fire pipeline in background ───────────────────────────────────────────
+    # ── Fire pipeline ─────────────────────────────────────────────────────────
     background_tasks.add_task(run_pipeline, session_id)
 
     return {
-        "session_id":   session_id,
+        "session_id":    session_id,
+        "business_id":   business_id,
         "total_reviews": len(df),
         "detected_columns": {
             "text":   text_col,
@@ -141,6 +174,7 @@ async def upload_csv(
         },
         "status_url":    f"/pipeline/{session_id}/status",
         "dashboard_url": f"/results/{session_id}/dashboard",
+        "workspace_url": f"/business/{business_id}/analysis" if business_id else None,
     }
 
 

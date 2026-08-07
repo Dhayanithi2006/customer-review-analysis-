@@ -18,6 +18,7 @@ class PlayStoreRequest(BaseModel):
     lang: str = Field(default="en")
     country: str = Field(default="us")
     team_size: str = Field(default="2_5")
+    business_id: str | None = Field(default=None, description="Phase 2: link to business workspace")
 
 
 @router.post("/play-store")
@@ -59,14 +60,41 @@ async def upload_play_store(
     db = get_db()
     session_id = str(uuid.uuid4())
 
-    db.table("sessions").insert({
+    session_row = {
         "id":            session_id,
         "filename":      f"play_store:{body.app_id}",
         "source":        "play_store",
         "team_size":     body.team_size,
         "status":        "pending",
         "total_reviews": len(valid),
-    }).execute()
+    }
+    if body.business_id:
+        session_row["business_id"] = body.business_id
+
+    db.table("sessions").insert(session_row).execute()
+
+    # ── Link session to business with version tracking ────────────────────────
+    if body.business_id:
+        try:
+            existing = (
+                db.table("analysis_versions")
+                .select("version")
+                .eq("business_id", body.business_id)
+                .order("version", desc=True)
+                .limit(1)
+                .execute()
+                .data
+            )
+            next_version = (existing[0]["version"] + 1) if existing else 1
+            db.table("analysis_versions").insert({
+                "business_id": body.business_id,
+                "session_id":  session_id,
+                "version":     next_version,
+                "label":       f"Version {next_version}",
+                "status":      "pending",
+            }).execute()
+        except Exception:
+            pass
 
     # Build rows
     rows = []
@@ -98,8 +126,10 @@ async def upload_play_store(
 
     return {
         "session_id":    session_id,
+        "business_id":   body.business_id,
         "app_id":        body.app_id,
         "total_reviews": len(valid),
         "status_url":    f"/pipeline/{session_id}/status",
         "dashboard_url": f"/results/{session_id}/dashboard",
+        "workspace_url": f"/business/{body.business_id}/analysis" if body.business_id else None,
     }

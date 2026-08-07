@@ -287,3 +287,183 @@ async def update_workspace_settings(business_id: str, body: WorkspaceSettingsUpd
     row = result.data[0]
     feedback_type = "qr" if row["industry"] in QR_BASED_INDUSTRIES else "digital"
     return _build_response(row, feedback_type)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Analysis Version Endpoints (Phase 2 — single business_id identity)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/{business_id}/analyses")
+async def list_analyses(business_id: str):
+    """
+    List all analysis versions for a business workspace.
+    Returns versions in descending order (newest first).
+    """
+    db = get_db()
+
+    # Validate business exists
+    biz = db.table("businesses").select("id,business_name").eq("id", business_id).execute().data
+    if not biz:
+        raise HTTPException(status_code=404, detail="Business not found.")
+
+    versions = (
+        db.table("analysis_versions")
+        .select("*")
+        .eq("business_id", business_id)
+        .order("version", desc=True)
+        .execute()
+        .data
+    )
+
+    # Enrich each version with session info
+    enriched = []
+    for v in versions:
+        session = (
+            db.table("sessions")
+            .select("status,total_reviews,actionable_reviews,source,filename,created_at")
+            .eq("id", v["session_id"])
+            .execute()
+            .data
+        )
+        session_data = session[0] if session else {}
+        # Sync version status from session
+        v["status"] = session_data.get("status", v["status"])
+        v["total_reviews"] = session_data.get("total_reviews", 0)
+        v["actionable_reviews"] = session_data.get("actionable_reviews", 0)
+        v["source"] = session_data.get("source", "unknown")
+        v["filename"] = session_data.get("filename", "")
+        enriched.append(v)
+
+    return {
+        "business_id":   business_id,
+        "business_name": biz[0]["business_name"],
+        "total_analyses": len(enriched),
+        "analyses":      enriched,
+    }
+
+
+@router.get("/{business_id}/analyses/latest")
+async def get_latest_analysis(business_id: str):
+    """
+    Get the most recent COMPLETED analysis session for a business.
+    This is the single source of truth for the Decision Center.
+    Returns the session_id to be used for fetching dashboard data.
+    """
+    db = get_db()
+
+    biz = db.table("businesses").select("id").eq("id", business_id).execute().data
+    if not biz:
+        raise HTTPException(status_code=404, detail="Business not found.")
+
+    # Get latest completed session linked to this business
+    latest_version = (
+        db.table("analysis_versions")
+        .select("session_id,version,label,created_at")
+        .eq("business_id", business_id)
+        .order("version", desc=True)
+        .limit(10)
+        .execute()
+        .data
+    )
+
+    if not latest_version:
+        return {
+            "has_analysis": False,
+            "session_id": None,
+            "version": None,
+            "message": "No analysis has been run yet. Upload feedback to get started.",
+        }
+
+    # Find first completed one
+    for v in latest_version:
+        session = (
+            db.table("sessions")
+            .select("status,total_reviews,actionable_reviews,created_at")
+            .eq("id", v["session_id"])
+            .execute()
+            .data
+        )
+        if session and session[0].get("status") == "complete":
+            return {
+                "has_analysis": True,
+                "session_id":   v["session_id"],
+                "version":      v["version"],
+                "label":        v["label"],
+                "created_at":   str(session[0]["created_at"]),
+                "total_reviews": session[0].get("total_reviews", 0),
+                "actionable_reviews": session[0].get("actionable_reviews", 0),
+            }
+
+    # Latest run is still processing
+    v = latest_version[0]
+    session = db.table("sessions").select("status,current_step").eq("id", v["session_id"]).execute().data
+    status = session[0].get("status", "pending") if session else "pending"
+
+    return {
+        "has_analysis":  False,
+        "session_id":    v["session_id"],
+        "version":       v["version"],
+        "label":         v["label"],
+        "status":        status,
+        "message":       f"Analysis {v['label']} is currently {status}.",
+    }
+
+
+@router.get("/{business_id}/reviews")
+async def get_business_reviews(business_id: str, limit: int = 50, offset: int = 0):
+    """
+    Review Repository — all reviews imported for this business workspace.
+    Returns paginated list across all analysis versions.
+    """
+    db = get_db()
+
+    biz = db.table("businesses").select("id,business_name").eq("id", business_id).execute().data
+    if not biz:
+        raise HTTPException(status_code=404, detail="Business not found.")
+
+    # Get all session_ids for this business
+    versions = (
+        db.table("analysis_versions")
+        .select("session_id")
+        .eq("business_id", business_id)
+        .execute()
+        .data
+    )
+
+    if not versions:
+        return {
+            "business_id": business_id,
+            "total": 0,
+            "reviews": [],
+            "message": "No reviews yet. Upload feedback to populate the Review Repository.",
+        }
+
+    session_ids = [v["session_id"] for v in versions]
+
+    # Fetch reviews across all sessions (paginated)
+    total_query = (
+        db.table("reviews")
+        .select("id", count="exact")
+        .in_("session_id", session_ids)
+        .execute()
+    )
+    total = total_query.count or 0
+
+    reviews = (
+        db.table("reviews")
+        .select("id,session_id,raw_text,rating,source,review_date,is_spam,is_duplicate,sentiment_label,sentiment_score")
+        .in_("session_id", session_ids)
+        .order("review_date", desc=True)
+        .range(offset, offset + limit - 1)
+        .execute()
+        .data
+    )
+
+    return {
+        "business_id": business_id,
+        "total":       total,
+        "limit":       limit,
+        "offset":      offset,
+        "reviews":     reviews,
+    }
+

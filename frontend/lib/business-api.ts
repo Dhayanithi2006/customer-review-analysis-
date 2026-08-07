@@ -68,3 +68,54 @@ export async function updateWorkspaceSettings(
   toast.success("Settings saved", "Workspace revenue settings updated.");
   return res.json();
 }
+
+export interface AnalysisVersion {
+  id: string;
+  business_id: string;
+  session_id: string;
+  version: number;
+  label: string;
+  status: string;
+  total_reviews: number;
+  actionable_reviews: number;
+  source: string;
+  filename: string;
+  created_at: string;
+}
+
+export interface AnalysesResponse {
+  business_id: string;
+  business_name: string;
+  total_analyses: number;
+  analyses: AnalysisVersion[];
+}
+
+export interface LatestAnalysisResponse {
+  has_analysis: boolean;
+  session_id: string | null;
+  version: number | null;
+  label: string | null;
+  status?: string;
+  created_at?: string;
+  total_reviews?: number;
+  actionable_reviews?: number;
+  message?: string;
+}
+
+export async function getBusinessAnalyses(businessId: string): Promise<AnalysesResponse> {
+  const res = await fetch(`${BASE_URL}/business/${businessId}/analyses`);
+  if (!res.ok) throw new Error("Failed to load analysis history");
+  return res.json();
+}
+
+export async function getLatestAnalysis(businessId: string): Promise<LatestAnalysisResponse> {
+  const res = await fetch(`${BASE_URL}/business/${businessId}/analyses/latest`);
+  if (!res.ok) throw new Error("Failed to load latest analysis");
+  return res.json();
+}
+
+export async function getBusinessReviews(businessId: string, limit = 50, offset = 0) {
+  const res = await fetch(`${BASE_URL}/business/${businessId}/reviews?limit=${limit}&offset=${offset}`);
+  if (!res.ok) throw new Error("Failed to load reviews");
+  return res.json();
+}
