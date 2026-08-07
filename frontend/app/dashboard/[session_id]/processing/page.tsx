@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getPipelineStatus } from "@/lib/api";
 import { Progress } from "@/components/ui/progress";
+import { toast } from "@/lib/toast";
 
 const STEPS = [
   { step: 1, label: "Removing duplicates & spam",          icon: "🧹", desc: "Cleaning raw review data" },
@@ -14,6 +15,8 @@ const STEPS = [
   { step: 7, label: "Building roadmap & sprint plan",      icon: "🗺️", desc: "Finalising deliverables" },
 ];
 
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export default function ProcessingPage() {
   const params    = useParams();
   const router    = useRouter();
@@ -24,22 +27,84 @@ export default function ProcessingPage() {
   const [done, setDone]     = useState(false);
 
   useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        const s = await getPipelineStatus(sessionId);
-        setStatus(s);
-        if (s.status === "complete") {
-          clearInterval(interval);
-          setDone(true);
-          setTimeout(() => router.push(`/dashboard/${sessionId}`), 1200);
+    let es: EventSource | null = null;
+    let pollInterval: NodeJS.Timeout | null = null;
+    let completed = false;
+
+    const handleComplete = () => {
+      if (completed) return;
+      completed = true;
+      setDone(true);
+      toast.success("Analysis Complete!", "Dashboard, roadmap, and sprint plan are ready.");
+      setTimeout(() => router.push(`/dashboard/${sessionId}`), 1200);
+    };
+
+    const handleFail = (msg?: string) => {
+      if (completed) return;
+      completed = true;
+      setFailed(true);
+      toast.error("Pipeline Failed", msg || "An error occurred during processing.");
+    };
+
+    // Attempt SSE stream first
+    try {
+      es = new EventSource(`${BASE_URL}/pipeline/${sessionId}/status`);
+
+      es.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.error) {
+            es?.close();
+            startPolling();
+            return;
+          }
+          setStatus(payload);
+          if (payload.status === "complete") {
+            es?.close();
+            handleComplete();
+          } else if (payload.status === "failed") {
+            es?.close();
+            handleFail(payload.message);
+          }
+        } catch {
+          // ignore parse error
         }
-        if (s.status === "failed") {
-          clearInterval(interval);
-          setFailed(true);
+      };
+
+      es.onerror = () => {
+        // SSE disconnect or error -> fallback to polling
+        es?.close();
+        if (!completed) {
+          startPolling();
         }
-      } catch { /* network blip — keep polling */ }
-    }, 1500);
-    return () => clearInterval(interval);
+      };
+    } catch {
+      startPolling();
+    }
+
+    function startPolling() {
+      if (pollInterval || completed) return;
+      pollInterval = setInterval(async () => {
+        try {
+          const s = await getPipelineStatus(sessionId);
+          setStatus(s);
+          if (s.status === "complete") {
+            if (pollInterval) clearInterval(pollInterval);
+            handleComplete();
+          } else if (s.status === "failed") {
+            if (pollInterval) clearInterval(pollInterval);
+            handleFail(s.message);
+          }
+        } catch {
+          /* network blip — keep polling */
+        }
+      }, 1500);
+    }
+
+    return () => {
+      if (es) es.close();
+      if (pollInterval) clearInterval(pollInterval);
+    };
   }, [sessionId, router]);
 
   return (
@@ -90,7 +155,7 @@ export default function ProcessingPage() {
           {/* Step list */}
           <div className="space-y-2">
             {STEPS.map(s => {
-              const done    = s.step < status.step;
+              const isDone    = s.step < status.step;
               const current = s.step === status.step;
               const future  = s.step > status.step;
 
@@ -100,20 +165,20 @@ export default function ProcessingPage() {
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-300 ${
                     current
                       ? "bg-indigo-500/8 border-indigo-500/25 shadow-[0_0_0_1px_rgba(99,102,241,0.1)]"
-                      : done
+                      : isDone
                       ? "bg-emerald-500/5 border-emerald-500/15"
                       : "border-transparent"
                   } ${future ? "opacity-30" : ""}`}
                 >
                   {/* Icon */}
                   <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-lg">
-                    {done ? "✅" : s.icon}
+                    {isDone ? "✅" : s.icon}
                   </div>
 
                   {/* Labels */}
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm font-semibold leading-tight ${
-                      done ? "text-emerald-400" : current ? "text-slate-100" : "text-slate-500"
+                      isDone ? "text-emerald-400" : current ? "text-slate-100" : "text-slate-500"
                     }`}>
                       {s.label}
                     </p>

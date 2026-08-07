@@ -24,9 +24,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from routers import upload, pipeline, results, meeting, export
+from routers import upload, pipeline, results, meeting, export, play_store
 # Register API Routers
 app.include_router(upload.router)
+app.include_router(play_store.router)
 app.include_router(pipeline.router)
 app.include_router(results.router)
 app.include_router(meeting.router)
@@ -41,7 +42,7 @@ def health_root():
     return {"status": "ok", "version": "2.0.0"}
 
 
-# Global Exception Handler
+# Global Exception Handlers
 @app.exception_handler(RoadmapAIException)
 async def roadmapai_exception_handler(request: Request, exc: RoadmapAIException):
     logger.error(f"Domain Error: {exc.code} - {exc.message}")
@@ -50,6 +51,18 @@ async def roadmapai_exception_handler(request: Request, exc: RoadmapAIException)
         content={
             "error": exc.code,
             "message": exc.message,
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "internal_error",
+            "message": str(exc)[:200],
         },
     )
 

@@ -13,6 +13,8 @@ export const metadata: Metadata = {
   },
 };
 
+import { ToastContainer } from "@/components/shared/ToastContainer";
+
 export default function RootLayout({
   children,
 }: {
@@ -28,7 +30,10 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <ToastContainer />
+      </body>
     </html>
   );
 }

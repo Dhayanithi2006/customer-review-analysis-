@@ -1,15 +1,17 @@
 "use client";
 import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { uploadCSV } from "@/lib/api";
+import Link from "next/link";
+import { uploadCSV, uploadPlayStore } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 
 const SOURCES = [
-  { id: "play_store", label: "Play Store",  emoji: "🤖" },
-  { id: "app_store",  label: "App Store",   emoji: "🍎" },
-  { id: "support",    label: "Support",     emoji: "🎧" },
-  { id: "twitter",    label: "Twitter/X",   emoji: "𝕏"  },
-  { id: "reddit",     label: "Reddit",      emoji: "👾" },
+  { id: "play_store", label: "Play Store App", emoji: "🤖" },
+  { id: "csv_file",   label: "CSV Upload",     emoji: "📄" },
+  { id: "app_store",  label: "App Store",      emoji: "🍎" },
+  { id: "support",    label: "Support",        emoji: "🎧" },
+  { id: "twitter",    label: "Twitter/X",      emoji: "𝕏"  },
+  { id: "reddit",     label: "Reddit",         emoji: "👾" },
 ];
 
 const TEAM_SIZES = [
@@ -19,21 +21,22 @@ const TEAM_SIZES = [
 ];
 
 const PIPELINE_STEPS = [
-  { icon: "📥", label: "Upload CSV",       desc: "Any format. Auto-detected." },
-  { icon: "🧹", label: "Clean & Filter",   desc: "Spam, dupes removed." },
-  { icon: "💬", label: "VADER Sentiment",  desc: "Routes actionable reviews." },
-  { icon: "🤖", label: "Gemini AI",        desc: "Categorises & clusters." },
-  { icon: "📊", label: "Priority Engine",  desc: "Scores every issue." },
-  { icon: "🗺️", label: "Roadmap + Sprint", desc: "6 weeks. Jira-ready." },
-  { icon: "🎤", label: "AI Meeting",       desc: "Ask anything. Get answers." },
+  { icon: "📥", label: "Ingest Data",      desc: "CSV or Play Store scraper" },
+  { icon: "🧹", label: "Clean & Filter",   desc: "Spam & dupes removed" },
+  { icon: "💬", label: "VADER Sentiment",  desc: "Routes actionable reviews" },
+  { icon: "🤖", label: "Gemini AI",        desc: "Categorises & clusters" },
+  { icon: "📊", label: "Priority Engine",  desc: "Scores every issue" },
+  { icon: "🗺️", label: "Roadmap + Sprint", desc: "6 weeks. Jira-ready" },
+  { icon: "🎤", label: "AI Meeting",       desc: "Ask anything. Get answers" },
 ];
 
 export default function HomePage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [mode, setMode]         = useState<"play_store" | "csv">("play_store");
+  const [appId, setAppId]       = useState("com.spotify.music");
   const [file, setFile]         = useState<File | null>(null);
-  const [source, setSource]     = useState("play_store");
   const [teamSize, setTeamSize] = useState("2_5");
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -54,14 +57,28 @@ export default function HomePage() {
   }, []);
 
   const handleSubmit = async () => {
-    if (!file) { setError("Please select a CSV file."); return; }
     setUploading(true);
     setError(null);
     try {
-      const result = await uploadCSV(file, source, teamSize);
-      router.push(`/dashboard/${result.session_id}/processing`);
+      if (mode === "play_store") {
+        if (!appId.trim()) {
+          setError("Please enter a Play Store App Package ID.");
+          setUploading(false);
+          return;
+        }
+        const result = await uploadPlayStore(appId.trim(), 200, teamSize);
+        router.push(`/dashboard/${result.session_id}/processing`);
+      } else {
+        if (!file) {
+          setError("Please select a CSV file.");
+          setUploading(false);
+          return;
+        }
+        const result = await uploadCSV(file, "csv", teamSize);
+        router.push(`/dashboard/${result.session_id}/processing`);
+      }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Upload failed. Please try again.");
+      setError(err instanceof Error ? err.message : "Processing failed. Please try again.");
       setUploading(false);
     }
   };
@@ -84,13 +101,22 @@ export default function HomePage() {
             </div>
             <span className="font-black text-base tracking-tight">RoadmapAI</span>
           </div>
-          <span className="text-xs text-slate-500 font-mono hidden sm:block">From Customer Voice to Product Decisions</span>
+
+          <div className="flex items-center gap-4">
+            <Link
+              href="/history"
+              className="text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors no-underline flex items-center gap-1.5"
+            >
+              📜 Past Sessions
+            </Link>
+            <span className="text-xs text-slate-500 font-mono hidden sm:block">From Customer Voice to Product Decisions</span>
+          </div>
         </div>
       </nav>
 
       <div className="mx-auto max-w-screen-xl px-6">
         {/* ── Hero ── */}
-        <div className="text-center pt-20 pb-16 animate-fade-in-up">
+        <div className="text-center pt-16 pb-12 animate-fade-in-up">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-xs font-semibold text-indigo-300 mb-6">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             ✨ AI Product Intelligence Platform
@@ -106,15 +132,15 @@ export default function HomePage() {
             <br className="hidden sm:block" /> in 3 minutes
           </h1>
 
-          <p className="text-lg text-slate-400 max-w-xl mx-auto mb-10 leading-relaxed">
-            Upload your customer feedback. RoadmapAI tells you exactly what to build next —
+          <p className="text-lg text-slate-400 max-w-xl mx-auto mb-8 leading-relaxed">
+            Fetch real app reviews from Play Store or upload your CSV. RoadmapAI tells you exactly what to build next —
             with evidence, priority scores, and Jira-ready stories.
           </p>
 
           {/* Trust signals */}
-          <div className="flex items-center justify-center gap-6 flex-wrap mb-16">
+          <div className="flex items-center justify-center gap-6 flex-wrap mb-12">
             {[
-              { icon: "🔒", text: "Reviews never stored raw" },
+              { icon: "🤖", text: "Direct Google Play Store Scraper" },
               { icon: "⚡", text: "Results in ~3 minutes" },
               { icon: "📋", text: "Jira-ready sprint" },
               { icon: "🎯", text: "Evidence-backed decisions" },
@@ -130,29 +156,34 @@ export default function HomePage() {
         {/* ── Upload Card ── */}
         <div className="max-w-2xl mx-auto pb-20 animate-fade-in-up" style={{ animationDelay: "0.15s" }}>
           <div className="rounded-2xl border border-white/10 bg-[#0f111a] shadow-[0_0_80px_rgba(99,102,241,0.08)] p-8">
-            {/* Step 1: Source */}
+            {/* Mode Selector */}
             <div className="mb-7">
               <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-3">
-                Step 1 — Review Source
+                Step 1 — Choose Source Mode
               </p>
-              <div className="flex gap-2 flex-wrap">
-                {SOURCES.map(s => (
-                  <button
-                    key={s.id}
-                    id={`source-${s.id}`}
-                    onClick={() => setSource(s.id)}
-                    className={`flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all duration-150 min-w-[76px] ${
-                      source === s.id
-                        ? "border-indigo-500 bg-indigo-500/12 shadow-[0_0_0_1px_rgba(99,102,241,0.2)]"
-                        : "border-white/7 bg-[#161827] hover:border-white/15"
-                    }`}
-                  >
-                    <span className="text-2xl">{s.emoji}</span>
-                    <span className={`text-[11px] font-semibold ${source === s.id ? "text-slate-100" : "text-slate-400"}`}>
-                      {s.label}
-                    </span>
-                  </button>
-                ))}
+              <div className="flex gap-2 p-1 rounded-xl bg-[#161827] border border-white/7">
+                <button
+                  type="button"
+                  onClick={() => setMode("play_store")}
+                  className={`flex-1 py-2.5 px-4 rounded-lg font-semibold text-xs transition-all flex items-center justify-center gap-2 ${
+                    mode === "play_store"
+                      ? "bg-indigo-500 text-white shadow-lg"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <span>🤖</span> Play Store App Scraper
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode("csv")}
+                  className={`flex-1 py-2.5 px-4 rounded-lg font-semibold text-xs transition-all flex items-center justify-center gap-2 ${
+                    mode === "csv"
+                      ? "bg-indigo-500 text-white shadow-lg"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <span>📄 Upload Custom CSV</span>
+                </button>
               </div>
             </div>
 
@@ -179,52 +210,82 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Step 3: File Upload */}
-            <div className="mb-6">
-              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-3">
-                Step 3 — Upload CSV
-              </p>
-
-              <div
-                id="upload-dropzone"
-                className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-200 ${
-                  dragOver
-                    ? "border-indigo-500 bg-indigo-500/8 shadow-[0_0_40px_rgba(99,102,241,0.15)]"
-                    : file
-                    ? "border-emerald-500/50 bg-emerald-500/5"
-                    : "border-white/10 bg-[#0f111a] hover:border-indigo-500/40 hover:bg-indigo-500/5"
-                }`}
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={handleDrop}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".csv"
-                  className="hidden"
-                  onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
-                />
-                {file ? (
-                  <div>
-                    <div className="text-4xl mb-3">✅</div>
-                    <p className="font-bold text-slate-100 mb-1">{file.name}</p>
-                    <p className="text-sm text-slate-500">{(file.size / 1024).toFixed(0)} KB · Click to change</p>
+            {/* Step 3: Input depending on mode */}
+            {mode === "play_store" ? (
+              <div className="mb-6">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-3">
+                  Step 3 — Enter Google Play Package ID
+                </p>
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    value={appId}
+                    onChange={(e) => setAppId(e.target.value)}
+                    placeholder="e.g. com.spotify.music or com.instagram.android"
+                    className="w-full bg-[#161827] border border-white/10 rounded-xl px-4 py-3.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  />
+                  <div className="flex gap-2 flex-wrap text-xs text-slate-500">
+                    <span>Popular apps:</span>
+                    {["com.spotify.music", "com.whatsapp", "com.duolingo", "com.slack"].map((app) => (
+                      <button
+                        key={app}
+                        type="button"
+                        onClick={() => setAppId(app)}
+                        className="text-indigo-400 hover:underline font-mono"
+                      >
+                        {app}
+                      </button>
+                    ))}
                   </div>
-                ) : (
-                  <div>
-                    <div className="text-5xl mb-4 animate-float">📂</div>
-                    <p className="font-semibold text-slate-200 mb-1">Drop your CSV here</p>
-                    <p className="text-sm text-slate-500">or click to browse · max 50 MB · up to 10,000 reviews</p>
-                  </div>
-                )}
+                </div>
               </div>
+            ) : (
+              <div className="mb-6">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-3">
+                  Step 3 — Upload CSV File
+                </p>
 
-              <p className="text-xs text-slate-600 mt-3 text-center">
-                💡 Any CSV with a review/text column works. Column names are auto-detected.
-              </p>
-            </div>
+                <div
+                  id="upload-dropzone"
+                  className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-200 ${
+                    dragOver
+                      ? "border-indigo-500 bg-indigo-500/8 shadow-[0_0_40px_rgba(99,102,241,0.15)]"
+                      : file
+                      ? "border-emerald-500/50 bg-emerald-500/5"
+                      : "border-white/10 bg-[#0f111a] hover:border-indigo-500/40 hover:bg-indigo-500/5"
+                  }`}
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={handleDrop}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv"
+                    className="hidden"
+                    onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
+                  />
+                  {file ? (
+                    <div>
+                      <div className="text-4xl mb-3">✅</div>
+                      <p className="font-bold text-slate-100 mb-1">{file.name}</p>
+                      <p className="text-sm text-slate-500">{(file.size / 1024).toFixed(0)} KB · Click to change</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="text-5xl mb-4 animate-float">📂</div>
+                      <p className="font-semibold text-slate-200 mb-1">Drop your CSV here</p>
+                      <p className="text-sm text-slate-500">or click to browse · max 50 MB · up to 10,000 reviews</p>
+                    </div>
+                  )}
+                </div>
+
+                <p className="text-xs text-slate-600 mt-3 text-center">
+                  💡 Any CSV with a review/text column works. Column names are auto-detected.
+                </p>
+              </div>
+            )}
 
             {/* Error */}
             {error && (
@@ -237,17 +298,17 @@ export default function HomePage() {
             <Button
               id="btn-analyze"
               onClick={handleSubmit}
-              disabled={uploading || !file}
+              disabled={uploading || (mode === "csv" && !file) || (mode === "play_store" && !appId.trim())}
               size="lg"
               className="w-full justify-center"
             >
               {uploading ? (
                 <>
                   <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Uploading…
+                  Processing…
                 </>
               ) : (
-                <>🚀 Analyse My Reviews</>
+                <>🚀 Analyse {mode === "play_store" ? "Play Store App" : "Reviews"}</>
               )}
             </Button>
           </div>

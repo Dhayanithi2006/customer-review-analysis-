@@ -1,3 +1,4 @@
+import re
 from typing import List
 from ai.schemas import (
     CategorizationItem, ExecutiveSummarySchema,
