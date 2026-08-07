@@ -10,11 +10,13 @@ import { WeekCard } from "@/components/roadmap/WeekCard";
 import { SkeletonRoadmap } from "@/components/roadmap/SkeletonRoadmap";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { WorkspacePage, PageIntro } from "@/components/layout/workspace-page";
 
 const EFFORT_COLOR: Record<string, string> = {
-  "Quick Win": "#10b981",
-  "Medium":    "#f59e0b",
-  "Large":     "#ef4444",
+  "Quick Win": "#22C55E",
+  "Medium":    "#F59E0B",
+  "Large":     "#EF4444",
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -22,10 +24,10 @@ const CustomTooltip = ({ active, payload }: any) => {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
   return (
-    <div className="rounded-xl border border-white/10 bg-[#161827] px-3 py-2 text-xs shadow-xl">
+    <div className="rounded-xl border border-white/[0.08] bg-surface-2 px-3 py-2 text-xs shadow-lg">
       <p className="font-bold text-slate-200 mb-0.5">Week {d.week}</p>
       <p className="text-slate-400">{d.theme}</p>
-      <p className="font-semibold mt-1" style={{ color: EFFORT_COLOR[d.effort] || "#818cf8" }}>
+      <p className="font-semibold mt-1" style={{ color: EFFORT_COLOR[d.effort] || "#A99FFF" }}>
         {d.effort} · {d.count} issues
       </p>
     </div>
@@ -60,7 +62,7 @@ export default function RoadmapPage() {
   }));
 
   return (
-    <div className="min-h-screen bg-[#08090e]">
+    <div className="min-h-screen bg-background">
       <Navbar
         backHref={`/dashboard/${sessionId}`}
         backLabel="Dashboard"
@@ -70,39 +72,42 @@ export default function RoadmapPage() {
           <div className="flex gap-2">
             <Button asChild variant="outline" size="sm">
               <a href={exportUrls.roadmap(sessionId)} download id="btn-export-roadmap">
-                ⬇️ Export MD
+                Export MD
               </a>
             </Button>
             <Button asChild variant="outline" size="sm">
-              <Link href={`/dashboard/${sessionId}/sprint`}>⚡ Sprint →</Link>
+              <Link href={`/dashboard/${sessionId}/sprint`}>Sprint →</Link>
             </Button>
           </div>
         }
       />
 
-      <div className="mx-auto max-w-screen-md px-6 py-8">
-        {/* Header */}
-        <div className="mb-8 animate-fade-in">
-          <h1 className="text-3xl font-black text-slate-100 mb-2">6-Week Product Roadmap</h1>
-          <p className="text-slate-400">
-            Evidence-backed plan generated from your customer reviews. Every theme links to real feedback.
-          </p>
-        </div>
+      <WorkspacePage width="narrow">
+        <PageIntro
+          eyebrow="Roadmap"
+          title="6-week product roadmap"
+          description="Evidence-backed plan generated from your customer reviews. Every theme links to real feedback."
+        />
 
         {loading ? (
           <SkeletonRoadmap />
+        ) : roadmap.length === 0 ? (
+          <EmptyState
+            title="No roadmap yet"
+            description="Run analysis to generate a six-week plan from your customer issues."
+            action={{ label: "Back to dashboard", href: `/dashboard/${sessionId}` }}
+          />
         ) : (
           <>
-            {/* ── Effort Chart ── */}
             {roadmap.length > 0 && (
-              <div className="rounded-2xl border border-white/7 bg-[#0f111a] p-5 mb-8 animate-fade-in">
-                <h3 className="text-sm font-bold text-slate-300 mb-4">Issues per Week</h3>
+              <div className="rounded-[18px] border border-border bg-surface p-5 mb-8 animate-fade-in">
+                <h2 className="text-sm font-bold text-slate-300 mb-4">Issues per week</h2>
                 <ResponsiveContainer width="100%" height={120}>
                   <BarChart data={chartData} barSize={32}>
                     <XAxis
                       dataKey="week"
-                      tickFormatter={v => `W${v}`}
-                      tick={{ fill: "#475569", fontSize: 11 }}
+                      tickFormatter={(v) => `W${v}`}
+                      tick={{ fill: "#64748B", fontSize: 11 }}
                       axisLine={false}
                       tickLine={false}
                     />
@@ -110,17 +115,16 @@ export default function RoadmapPage() {
                     <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
                     <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                       {chartData.map((entry, i) => (
-                        <Cell key={i} fill={EFFORT_COLOR[entry.effort] || "#6366f1"} fillOpacity={0.8} />
+                        <Cell key={i} fill={EFFORT_COLOR[entry.effort] || "#6D5DF6"} fillOpacity={0.85} />
                       ))}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
 
-                {/* Legend */}
                 <div className="flex gap-4 mt-3 flex-wrap">
                   {Object.entries(EFFORT_COLOR).map(([label, color]) => (
                     <div key={label} className="flex items-center gap-1.5 text-xs text-slate-500">
-                      <div className="w-2.5 h-2.5 rounded-sm" style={{ background: color }} />
+                      <div className="w-2.5 h-2.5 rounded-sm" style={{ background: color }} aria-hidden />
                       {label}
                     </div>
                   ))}
@@ -128,7 +132,6 @@ export default function RoadmapPage() {
               </div>
             )}
 
-            {/* ── Timeline ── */}
             <div className="relative">
               {roadmap.map((week, i) => (
                 <WeekCard
@@ -141,18 +144,17 @@ export default function RoadmapPage() {
               ))}
             </div>
 
-            {/* ── CTA ── */}
             <div className="flex gap-3 mt-10 flex-wrap">
               <Button asChild id="btn-to-sprint">
-                <Link href={`/dashboard/${sessionId}/sprint`}>⚡ View Sprint Plan →</Link>
+                <Link href={`/dashboard/${sessionId}/sprint`}>View sprint plan</Link>
               </Button>
               <Button asChild variant="outline" id="btn-to-meeting">
-                <Link href={`/dashboard/${sessionId}/meeting`}>🎤 Discuss with AI</Link>
+                <Link href={`/dashboard/${sessionId}/meeting`}>Discuss with AI</Link>
               </Button>
             </div>
           </>
         )}
-      </div>
+      </WorkspacePage>
     </div>
   );
 }

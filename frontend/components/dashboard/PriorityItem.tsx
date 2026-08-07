@@ -16,10 +16,10 @@ export function PriorityItem({ cluster, sessionId, rank }: PriorityItemProps) {
     <Link
       href={`/dashboard/${sessionId}/evidence/${cluster.issue_key}`}
       id={`priority-${cluster.issue_key}`}
-      className="group flex items-center gap-4 px-5 py-4 rounded-xl border border-white/7 bg-[#0f111a] hover:bg-[#161827] hover:border-indigo-500/40 transition-all duration-150 cursor-pointer no-underline hover:shadow-[0_0_0_1px_rgba(99,102,241,0.15)] hover:translate-x-0.5"
+      className="group flex items-center gap-4 px-5 py-4 rounded-[16px] border border-border bg-surface hover:bg-surface-2 hover:border-primary/35 transition-all duration-150 cursor-pointer no-underline hover:translate-x-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
     >
       {/* Rank */}
-      <span className="text-xs font-black font-mono text-slate-600 min-w-[28px] group-hover:text-slate-400 transition-colors">
+      <span className="text-xs font-extrabold font-mono text-slate-600 min-w-[28px] group-hover:text-slate-400 transition-colors">
         #{rank}
       </span>
 
@@ -32,12 +32,12 @@ export function PriorityItem({ cluster, sessionId, rank }: PriorityItemProps) {
           <CategoryBadge category={cluster.category} />
         </div>
         <div className="flex gap-4 text-xs text-slate-500 flex-wrap">
-          <span>📊 {cluster.review_count} reviews</span>
+          <span>{cluster.review_count} reviews</span>
           {cluster.revenue_at_risk > 0 && (
             <span className="text-red-400">₹{(cluster.revenue_at_risk / 1000).toFixed(0)}K at risk</span>
           )}
           {cluster.premium_user_count > 0 && (
-            <span className="text-cyan-400">⭐ {cluster.premium_user_count} premium</span>
+            <span className="text-primary-soft">{cluster.premium_user_count} premium</span>
           )}
         </div>
       </div>
@@ -45,10 +45,10 @@ export function PriorityItem({ cluster, sessionId, rank }: PriorityItemProps) {
       {/* Score */}
       <div className="flex items-center gap-3 shrink-0">
         <div className="text-right">
-          <div className="text-base font-black font-mono text-indigo-400 leading-none">{score}</div>
+          <div className="text-base font-extrabold font-mono text-primary-soft leading-none">{score}</div>
           <div className="text-[10px] text-slate-600 mt-0.5">score</div>
         </div>
-        <span className="text-slate-500 group-hover:text-indigo-400 transition-colors">→</span>
+        <span className="text-slate-500 group-hover:text-primary-soft transition-colors" aria-hidden>→</span>
       </div>
     </Link>
   );

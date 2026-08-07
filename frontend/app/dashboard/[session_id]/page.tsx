@@ -2,12 +2,14 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { Sparkles } from "lucide-react";
 import { getDashboard } from "@/lib/api";
 import type { DashboardData, IssueCluster } from "@/lib/types";
 import { Navbar } from "@/components/shared/Navbar";
 import { SkeletonDashboard } from "@/components/dashboard/SkeletonDashboard";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Button } from "@/components/ui/button";
+import { WorkspacePage } from "@/components/layout/workspace-page";
 
 // ── Severity bar
 function SeverityBar({ value }: { value: number }) {
@@ -40,7 +42,7 @@ function CategoryBadge({ category }: { category: string }) {
     Bug: "bg-red-500/12 text-red-400 border-red-500/25",
     Performance: "bg-orange-500/12 text-orange-400 border-orange-500/25",
     UX: "bg-blue-500/12 text-blue-400 border-blue-500/25",
-    "Feature Request": "bg-indigo-500/12 text-indigo-400 border-indigo-500/25",
+    "Feature Request": "bg-primary/12 text-primary-soft border-primary/25",
     Pricing: "bg-amber-500/12 text-amber-400 border-amber-500/25",
     Onboarding: "bg-emerald-500/12 text-emerald-400 border-emerald-500/25",
     "Customer Support": "bg-purple-500/12 text-purple-400 border-purple-500/25",
@@ -68,12 +70,12 @@ function IssueCard({ cluster, sessionId, rank }: { cluster: IssueCluster; sessio
     <Link
       href={`/dashboard/${sessionId}/evidence/${cluster.issue_key}`}
       id={`issue-${cluster.issue_key}`}
-      className="group block rounded-2xl border border-white/7 bg-[#0d0f1a] hover:border-indigo-500/30 hover:bg-[#111422] transition-all duration-150 no-underline overflow-hidden"
+      className="group block rounded-2xl border border-border bg-surface hover:border-primary/30 hover:bg-surface-2 transition-all duration-150 no-underline overflow-hidden"
     >
       {/* Top bar */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
         <div className="flex items-center gap-3">
-          <span className={`text-xs font-black font-mono w-6 shrink-0 ${rank === 1 ? "text-indigo-400" : "text-slate-600"}`}>
+          <span className={`text-xs font-extrabold font-mono w-6 shrink-0 ${rank === 1 ? "text-primary-soft" : "text-slate-600"}`}>
             #{rank}
           </span>
           <div>
@@ -87,7 +89,7 @@ function IssueCard({ cluster, sessionId, rank }: { cluster: IssueCluster; sessio
           </div>
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-xl font-black font-mono text-indigo-400 leading-none">{score}</p>
+          <p className="text-xl font-extrabold font-mono text-primary-soft leading-none">{score}</p>
           <p className="text-[10px] text-slate-600 mt-0.5">priority score</p>
         </div>
       </div>
@@ -97,7 +99,7 @@ function IssueCard({ cluster, sessionId, rank }: { cluster: IssueCluster; sessio
         {/* Frequency */}
         <div className="p-4">
           <p className="text-[10px] text-slate-600 uppercase tracking-wider font-bold mb-1.5">Frequency</p>
-          <p className="text-base font-black text-slate-100 font-mono">{cluster.review_count.toLocaleString()}</p>
+          <p className="text-base font-extrabold text-slate-100 font-mono">{cluster.review_count.toLocaleString()}</p>
           <p className="text-[10px] text-slate-500 mt-0.5">customer mentions</p>
         </div>
         {/* Severity */}
@@ -111,13 +113,13 @@ function IssueCard({ cluster, sessionId, rank }: { cluster: IssueCluster; sessio
         {/* Revenue Impact */}
         <div className="p-4">
           <p className="text-[10px] text-slate-600 uppercase tracking-wider font-bold mb-1.5">Revenue Impact</p>
-          <p className={`text-base font-black font-mono ${cluster.revenue_at_risk > 0 ? "text-red-400" : "text-slate-500"}`}>{revenueK}</p>
+          <p className={`text-base font-extrabold font-mono ${cluster.revenue_at_risk > 0 ? "text-red-400" : "text-slate-500"}`}>{revenueK}</p>
           <p className="text-[10px] text-slate-500 mt-0.5">estimated monthly</p>
         </div>
         {/* Affected Users */}
         <div className="p-4">
           <p className="text-[10px] text-slate-600 uppercase tracking-wider font-bold mb-1.5">Affected Users</p>
-          <p className={`text-base font-black font-mono ${cluster.premium_user_count > 0 ? "text-amber-400" : "text-slate-500"}`}>
+          <p className={`text-base font-extrabold font-mono ${cluster.premium_user_count > 0 ? "text-amber-400" : "text-slate-500"}`}>
             {cluster.premium_user_count > 0 ? cluster.premium_user_count : "—"}
           </p>
           <p className="text-[10px] text-slate-500 mt-0.5">premium users</p>
@@ -131,9 +133,9 @@ function IssueCard({ cluster, sessionId, rank }: { cluster: IssueCluster; sessio
       </div>
 
       {/* Decision Score Pillars Breakdown */}
-      <div className="px-5 py-2.5 border-t border-white/5 bg-[#0a0c14] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+      <div className="px-5 py-2.5 border-t border-white/5 bg-background flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400">Decision Score Pillars</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-primary-soft">Decision Score Pillars</span>
           <span className="text-[10px] text-slate-500">(Formula Breakdown)</span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full sm:w-auto">
@@ -145,7 +147,7 @@ function IssueCard({ cluster, sessionId, rank }: { cluster: IssueCluster; sessio
           </div>
           <div className="flex items-center gap-1.5" title="Customer Reach (30% weight)">
             <div className="h-1.5 w-10 rounded-full bg-white/10 overflow-hidden">
-              <div className="h-full bg-indigo-400 rounded-full" style={{ width: `${cluster.decision_pillars?.reach_pct || 30}%` }} />
+              <div className="h-full bg-[#A99FFF] rounded-full" style={{ width: `${cluster.decision_pillars?.reach_pct || 30}%` }} />
             </div>
             <span className="text-[10px] font-mono text-slate-400">Reach: {cluster.decision_pillars?.reach_pct || 30}%</span>
           </div>
@@ -173,7 +175,7 @@ function IssueCard({ cluster, sessionId, rank }: { cluster: IssueCluster; sessio
             {recommendation}
           </p>
         </div>
-        <span className="text-xs text-indigo-400 group-hover:text-indigo-300 transition-colors flex items-center gap-1">
+        <span className="text-xs text-primary-soft group-hover:text-primary-soft-2 transition-colors flex items-center gap-1">
           View Evidence <span className="text-sm">→</span>
         </span>
       </div>
@@ -185,7 +187,7 @@ function IssueCard({ cluster, sessionId, rank }: { cluster: IssueCluster; sessio
 function PriorityMatrix({ issues }: { issues: IssueCluster[] }) {
   const top8 = issues.slice(0, 8);
   return (
-    <div className="relative w-full aspect-square max-h-[400px] rounded-2xl border border-white/7 bg-[#0d0f1a] overflow-hidden">
+    <div className="relative w-full aspect-square max-h-[400px] rounded-2xl border border-border bg-surface overflow-hidden">
       {/* Axis labels */}
       <div className="absolute left-0 top-0 bottom-8 w-8 flex items-center justify-center">
         <span className="text-[9px] text-slate-600 uppercase tracking-widest font-bold -rotate-90 whitespace-nowrap">Severity →</span>
@@ -201,7 +203,7 @@ function PriorityMatrix({ issues }: { issues: IssueCluster[] }) {
         {/* Quadrant labels */}
         <span className="absolute top-2 right-2 text-[9px] text-red-400/50 font-bold uppercase tracking-wider">Fix First</span>
         <span className="absolute top-2 left-2 text-[9px] text-amber-400/50 font-bold uppercase tracking-wider">Watch</span>
-        <span className="absolute bottom-2 right-2 text-[9px] text-indigo-400/50 font-bold uppercase tracking-wider">Plan</span>
+        <span className="absolute bottom-2 right-2 text-[9px] text-primary-soft/50 font-bold uppercase tracking-wider">Plan</span>
         <span className="absolute bottom-2 left-2 text-[9px] text-slate-500/50 font-bold uppercase tracking-wider">Backlog</span>
         {/* Dots */}
         {top8.map((issue) => {
@@ -209,7 +211,7 @@ function PriorityMatrix({ issues }: { issues: IssueCluster[] }) {
           const x = Math.min(95, Math.max(2, (issue.review_count / maxFreq) * 95));
           const y = Math.min(95, Math.max(2, ((10 - (issue.avg_severity || 5)) / 10) * 90));
           const size = issue.priority_rank === 1 ? "w-5 h-5" : "w-3.5 h-3.5";
-          const color = (issue.avg_severity || 0) >= 8 ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]" : (issue.avg_severity || 0) >= 5 ? "bg-amber-500" : "bg-indigo-500";
+          const color = (issue.avg_severity || 0) >= 8 ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]" : (issue.avg_severity || 0) >= 5 ? "bg-amber-500" : "bg-primary";
           return (
             <div
               key={issue.id}
@@ -230,15 +232,15 @@ function RoadmapWeekCard({ week, issues, effort }: { week: number; issues: strin
     : effort === "Medium" ? "text-amber-400 border-amber-500/20 bg-amber-500/5"
     : "text-red-400 border-red-500/20 bg-red-500/5";
   return (
-    <div className="rounded-xl border border-white/7 bg-[#0d0f1a] p-4">
+    <div className="rounded-xl border border-border bg-surface p-4">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Week {week}</span>
+        <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Week {week}</span>
         <span className={`px-2 py-0.5 rounded-full border text-[10px] font-semibold ${effortColor}`}>{effort}</span>
       </div>
       <div className="space-y-1.5">
         {issues.map((iss, i) => (
           <div key={i} className="flex items-start gap-2">
-            <span className="w-1 h-1 rounded-full bg-indigo-500 mt-1.5 shrink-0" />
+            <span className="w-1 h-1 rounded-full bg-primary mt-1.5 shrink-0" />
             <p className="text-xs text-slate-300 leading-relaxed">{iss}</p>
           </div>
         ))}
@@ -282,28 +284,28 @@ export default function DashboardPage() {
   const premiumAffected = data?.issues?.reduce((s, i) => s + (i.premium_user_count || 0), 0) || 0;
 
   return (
-    <div className="min-h-screen bg-[#08090e]">
+    <div className="min-h-screen bg-background">
       <Navbar
         sessionId={sessionId}
         actions={
           <>
             <Button asChild variant="outline" size="sm">
-              <Link href={`/dashboard/${sessionId}/meeting`} id="btn-nav-meeting">🎤 AI Meeting</Link>
+              <Link href={`/dashboard/${sessionId}/meeting`} id="btn-nav-meeting">AI Meeting</Link>
             </Button>
             <Button asChild variant="outline" size="sm">
-              <Link href={`/dashboard/${sessionId}/roadmap`} id="btn-nav-roadmap">🗺️ Roadmap</Link>
+              <Link href={`/dashboard/${sessionId}/roadmap`} id="btn-nav-roadmap">Roadmap</Link>
             </Button>
             <Button asChild variant="outline" size="sm">
-              <Link href={`/dashboard/${sessionId}/sprint`} id="btn-nav-sprint">⚡ Sprint</Link>
+              <Link href={`/dashboard/${sessionId}/sprint`} id="btn-nav-sprint">Sprint</Link>
             </Button>
             <Button asChild variant="secondary" size="sm">
-              <Link href={`/dashboard/${sessionId}/export`} id="btn-nav-export">⬇️ Export</Link>
+              <Link href={`/dashboard/${sessionId}/export`} id="btn-nav-export">Export</Link>
             </Button>
           </>
         }
       />
 
-      <div className="mx-auto max-w-screen-xl px-6 py-10 space-y-10">
+      <WorkspacePage width="wide" className="space-y-8 md:space-y-10">
         {loading ? (
           <SkeletonDashboard />
         ) : data ? (
@@ -313,7 +315,7 @@ export default function DashboardPage() {
             {/* ─────────────────────────────────────────────────────── */}
             <div className="border-b border-white/6 pb-6">
               <p className="text-xs text-slate-500 uppercase tracking-widest font-bold mb-2">Decision Intelligence</p>
-              <h1 className="text-3xl font-black text-slate-100 tracking-tight">
+              <h1 className="text-3xl font-extrabold text-slate-100 tracking-tight">
                 What issue should you fix first?
               </h1>
               {topIssue && (
@@ -334,19 +336,19 @@ export default function DashboardPage() {
               <section>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                    <span className="text-indigo-400">01</span> Executive Summary
+                    <span className="text-primary-soft">01</span> Executive Summary
                   </h2>
-                  <Link href={`/dashboard/${sessionId}/export`} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                  <Link href={`/dashboard/${sessionId}/export`} className="text-xs text-primary-soft hover:text-primary-soft-2 transition-colors">
                     Full Report →
                   </Link>
                 </div>
-                <div className="rounded-2xl border border-white/7 bg-[#0d0f1a] p-6">
+                <div className="rounded-2xl border border-border bg-surface p-6">
                   <p className={`text-sm text-slate-300 leading-relaxed ${!showFullSummary ? "line-clamp-3" : ""}`}>
                     {data.executive_summary}
                   </p>
                   <button
                     onClick={() => setShowFullSummary(v => !v)}
-                    className="mt-3 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                    className="mt-3 text-xs text-primary-soft hover:text-primary-soft-2 transition-colors"
                   >
                     {showFullSummary ? "Show less ↑" : "Read full summary ↓"}
                   </button>
@@ -359,7 +361,7 @@ export default function DashboardPage() {
                     <span className="text-xs text-slate-500">{(data.analysis_health?.total_processed || data.total_reviews).toLocaleString()} reviews processed</span>
                     <span className="text-xs text-slate-500">{data.analysis_health?.spam_skipped || 18} spam filtered</span>
                     <span className="text-xs text-slate-500">{data.analysis_health?.duplicates_removed || 12} duplicates removed</span>
-                    <span className="text-xs text-slate-500">AI confidence: <span className="text-indigo-400 font-semibold">{data.analysis_health?.ai_confidence || 94}%</span></span>
+                    <span className="text-xs text-slate-500">AI confidence: <span className="text-primary-soft font-semibold">{data.analysis_health?.ai_confidence || 94}%</span></span>
                   </div>
                 </div>
               </section>
@@ -370,7 +372,7 @@ export default function DashboardPage() {
             {/* ─────────────────────────────────────────────────────── */}
             <section>
               <h2 className="text-base font-bold text-slate-100 flex items-center gap-2 mb-4">
-                <span className="text-indigo-400">02</span> Revenue at Risk
+                <span className="text-primary-soft">02</span> Revenue at Risk
               </h2>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
@@ -402,15 +404,15 @@ export default function DashboardPage() {
                     label: "Top Revenue Issue",
                     value: topIssue?.issue_key.split("_").slice(0, 2).join(" ") || "—",
                     sub: `₹${((topIssue?.revenue_at_risk || 0) / 1000).toFixed(1)}K of total risk`,
-                    color: "text-indigo-400",
-                    border: "border-indigo-500/15",
+                    color: "text-primary-soft",
+                    border: "border-primary/15",
                     why: "Fix this one first",
                   },
                 ].map((card, i) => (
-                  <div key={i} className={`rounded-2xl border ${card.border} bg-[#0d0f1a] p-5 flex flex-col justify-between`}>
+                  <div key={i} className={`rounded-2xl border ${card.border} bg-surface p-5 flex flex-col justify-between`}>
                     <div>
                       <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-2">{card.label}</p>
-                      <p className={`text-2xl font-black font-mono ${card.color} mb-1`}>{card.value}</p>
+                      <p className={`text-2xl font-extrabold font-mono ${card.color} mb-1`}>{card.value}</p>
                       <p className="text-[11px] text-slate-500 leading-relaxed">{card.sub}</p>
                     </div>
                     <p className="text-[10px] text-slate-600 italic mt-4 pt-3 border-t border-white/5">{card.why}</p>
@@ -425,7 +427,7 @@ export default function DashboardPage() {
             <section>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                  <span className="text-indigo-400">03</span> Top Revenue-Impacting Issues
+                  <span className="text-primary-soft">03</span> Top Revenue-Impacting Issues
                 </h2>
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {categories.map(cat => (
@@ -433,7 +435,7 @@ export default function DashboardPage() {
                       key={cat}
                       onClick={() => setFilter(cat)}
                       id={`filter-${cat.replace(/\s/g, "-")}`}
-                      className={`px-3 py-1 rounded-lg text-[11px] font-semibold transition-all ${filter === cat ? "bg-indigo-600 text-white" : "bg-white/5 text-slate-400 hover:bg-white/8"}`}
+                      className={`px-3 py-1 rounded-lg text-[11px] font-semibold transition-all ${filter === cat ? "bg-primary text-white" : "bg-white/5 text-slate-400 hover:bg-white/8"}`}
                     >
                       {cat}
                     </button>
@@ -451,7 +453,7 @@ export default function DashboardPage() {
                   />
                 ))}
                 {filteredIssues.length === 0 && (
-                  <div className="text-center py-12 text-slate-500 text-sm rounded-2xl border border-white/7">
+                  <div className="text-center py-12 text-slate-500 text-sm rounded-2xl border border-border">
                     No issues found for this category.
                   </div>
                 )}
@@ -464,20 +466,22 @@ export default function DashboardPage() {
             {data.ai_recommendation && (
               <section>
                 <h2 className="text-base font-bold text-slate-100 flex items-center gap-2 mb-4">
-                  <span className="text-indigo-400">04</span> AI Recommendation
+                  <span className="text-primary-soft">04</span> AI Recommendation
                 </h2>
-                <div className="rounded-2xl border border-indigo-500/20 bg-gradient-to-r from-indigo-500/8 to-violet-500/4 p-6">
+                <div className="rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/10 to-primary-glow/5 p-6">
                   <div className="flex items-start gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-lg shrink-0">🎯</div>
+                    <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shrink-0" aria-hidden>
+                      <Sparkles className="size-5 text-white" />
+                    </div>
                     <div className="flex-1">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 mb-2">Evidence-Backed Recommendation</p>
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-primary-soft mb-2">Evidence-backed recommendation</p>
                       <p className="text-sm text-slate-100 font-semibold leading-relaxed mb-4">{data.ai_recommendation}</p>
                       {/* Evidence bullets */}
                       {data.headline_insights.length > 0 && (
                         <div className="space-y-2">
                           {data.headline_insights.slice(0, 3).map((insight, i) => (
                             <div key={i} className="flex items-start gap-2.5 text-xs text-slate-400">
-                              <span className="text-indigo-400 mt-0.5 shrink-0">◈</span>
+                              <span className="text-primary-soft mt-0.5 shrink-0">◈</span>
                               <span className="leading-relaxed">{insight}</span>
                             </div>
                           ))}
@@ -486,11 +490,9 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div className="mt-5 pt-4 border-t border-white/6 flex gap-3">
-                    <Link href={`/dashboard/${sessionId}/meeting`} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors">
-                      🎤 Ask AI a Question
+                    <Link href={`/dashboard/${sessionId}/meeting`} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition-colors">Ask AI a Question
                     </Link>
-                    <Link href={`/dashboard/${sessionId}/sprint`} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-white/10 hover:border-white/20 text-slate-300 text-xs font-semibold transition-colors">
-                      ⚡ View Sprint Plan
+                    <Link href={`/dashboard/${sessionId}/sprint`} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-white/10 hover:border-white/20 text-slate-300 text-xs font-semibold transition-colors">View Sprint Plan
                     </Link>
                   </div>
                 </div>
@@ -504,17 +506,17 @@ export default function DashboardPage() {
               <section>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                    <span className="text-indigo-400">05</span> Evidence Panel
+                    <span className="text-primary-soft">05</span> Evidence Panel
                   </h2>
                   <Link
                     href={`/dashboard/${sessionId}/evidence/${topIssue.issue_key}`}
-                    className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                    className="text-xs text-primary-soft hover:text-primary-soft-2 transition-colors"
                   >
                     Full evidence →
                   </Link>
                 </div>
-                <div className="rounded-2xl border border-white/7 bg-[#0d0f1a] overflow-hidden">
-                  <div className="flex items-center gap-3 px-5 py-3 border-b border-white/5 bg-[#0a0c14]">
+                <div className="rounded-2xl border border-border bg-surface overflow-hidden">
+                  <div className="flex items-center gap-3 px-5 py-3 border-b border-white/5 bg-background">
                     <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                     <span className="text-xs font-semibold text-slate-300">
                       {topIssue.review_count} customer reviews about{" "}
@@ -524,7 +526,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-px bg-white/5">
                     {topIssue.sample_reviews.slice(0, 6).map((review, i) => (
-                      <div key={i} className="p-4 bg-[#0d0f1a]">
+                      <div key={i} className="p-4 bg-surface">
                         <p className="text-xs text-slate-300 leading-relaxed italic">&ldquo;{review}&rdquo;</p>
                       </div>
                     ))}
@@ -538,12 +540,12 @@ export default function DashboardPage() {
             {/* ─────────────────────────────────────────────────────── */}
             <section>
               <h2 className="text-base font-bold text-slate-100 flex items-center gap-2 mb-4">
-                <span className="text-indigo-400">06</span> Customer Review Clusters
+                <span className="text-primary-soft">06</span> Customer Review Clusters
               </h2>
-              <div className="rounded-2xl border border-white/7 bg-[#0d0f1a] overflow-hidden">
+              <div className="rounded-2xl border border-border bg-surface overflow-hidden">
                 <table className="w-full text-left">
                   <thead>
-                    <tr className="border-b border-white/6 bg-[#0a0c14]">
+                    <tr className="border-b border-white/6 bg-background">
                       <th className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Issue</th>
                       <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider hidden sm:table-cell">Category</th>
                       <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Reviews</th>
@@ -556,7 +558,7 @@ export default function DashboardPage() {
                     {data.issues.map((issue, i) => (
                       <tr key={issue.id} className="border-b border-white/4 last:border-0 hover:bg-white/[0.02] transition-colors">
                         <td className="px-5 py-3">
-                          <Link href={`/dashboard/${sessionId}/evidence/${issue.issue_key}`} className="text-xs font-semibold text-slate-200 hover:text-indigo-400 transition-colors no-underline">
+                          <Link href={`/dashboard/${sessionId}/evidence/${issue.issue_key}`} className="text-xs font-semibold text-slate-200 hover:text-primary-soft transition-colors no-underline">
                             {issue.issue_key.replace(/_/g, " ")}
                           </Link>
                         </td>
@@ -575,7 +577,7 @@ export default function DashboardPage() {
                           </span>
                         </td>
                         <td className="px-5 py-3 text-right">
-                          <span className={`text-xs font-black font-mono ${i === 0 ? "text-indigo-400" : "text-slate-500"}`}>
+                          <span className={`text-xs font-extrabold font-mono ${i === 0 ? "text-primary-soft" : "text-slate-500"}`}>
                             #{issue.priority_rank || i + 1}
                           </span>
                         </td>
@@ -593,7 +595,7 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                    <span className="text-indigo-400">07</span> Priority Matrix
+                    <span className="text-primary-soft">07</span> Priority Matrix
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">Issues plotted by frequency vs severity. Top-right = fix immediately.</p>
                 </div>
@@ -605,9 +607,9 @@ export default function DashboardPage() {
                   {[
                     { color: "bg-red-500", label: "Fix First", desc: "High frequency + high severity. Immediate sprint priority." },
                     { color: "bg-amber-500", label: "Watch Closely", desc: "High severity but lower volume. Risk of escalation." },
-                    { color: "bg-indigo-500", label: "Plan Next", desc: "High frequency, moderate severity. Scheduled work." },
+                    { color: "bg-primary", label: "Plan Next", desc: "High frequency, moderate severity. Scheduled work." },
                   ].map((leg, i) => (
-                    <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-[#0d0f1a] border border-white/5">
+                    <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-surface border border-white/5">
                       <div className={`w-3 h-3 rounded-full ${leg.color} mt-0.5 shrink-0`} />
                       <div>
                         <p className="text-xs font-semibold text-slate-200">{leg.label}</p>
@@ -625,9 +627,9 @@ export default function DashboardPage() {
             <section>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                  <span className="text-indigo-400">08</span> Product Roadmap
+                  <span className="text-primary-soft">08</span> Product Roadmap
                 </h2>
-                <Link href={`/dashboard/${sessionId}/roadmap`} id="btn-view-roadmap" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                <Link href={`/dashboard/${sessionId}/roadmap`} id="btn-view-roadmap" className="text-xs text-primary-soft hover:text-primary-soft-2 transition-colors">
                   Full Roadmap →
                 </Link>
               </div>
@@ -653,13 +655,13 @@ export default function DashboardPage() {
             <section>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                  <span className="text-indigo-400">09</span> Sprint Plan
+                  <span className="text-primary-soft">09</span>Sprint Plan
                 </h2>
-                <Link href={`/dashboard/${sessionId}/sprint`} id="btn-view-sprint" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                <Link href={`/dashboard/${sessionId}/sprint`} id="btn-view-sprint" className="text-xs text-primary-soft hover:text-primary-soft-2 transition-colors">
                   Full Sprint →
                 </Link>
               </div>
-              <div className="rounded-2xl border border-white/7 bg-[#0d0f1a] p-6">
+              <div className="rounded-2xl border border-border bg-surface p-6">
                 <div className="flex items-center justify-between mb-5">
                   <div>
                     <p className="text-sm font-bold text-slate-100">Sprint 1 — Revenue Recovery</p>
@@ -668,7 +670,7 @@ export default function DashboardPage() {
                   <div className="flex items-center gap-3">
                     <div className="text-right">
                       <p className="text-xs text-slate-500">Story Points</p>
-                      <p className="text-base font-black font-mono text-indigo-400">21 SP</p>
+                      <p className="text-base font-extrabold font-mono text-primary-soft">21 SP</p>
                     </div>
                   </div>
                 </div>
@@ -679,7 +681,7 @@ export default function DashboardPage() {
                     { title: "Improve Payment Error Messages", points: 3, priority: "High", issue: "PAYMENT_UX" },
                     { title: "Auth Token Refresh on Expiry", points: 5, priority: "High", issue: "AUTH_SESSION" },
                   ].map((story, i) => (
-                    <div key={i} className="flex items-center gap-4 p-3.5 rounded-xl border border-white/5 bg-[#0a0c14] hover:border-white/10 transition-colors">
+                    <div key={i} className="flex items-center gap-4 p-3.5 rounded-xl border border-white/5 bg-background hover:border-white/10 transition-colors">
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-semibold text-slate-200 truncate">{story.title}</p>
                         <p className="text-[10px] text-slate-500 mt-0.5 font-mono">{story.issue}</p>
@@ -687,26 +689,24 @@ export default function DashboardPage() {
                       <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border shrink-0 ${story.priority === "Critical" ? "bg-red-500/10 text-red-400 border-red-500/25" : "bg-amber-500/10 text-amber-400 border-amber-500/25"}`}>
                         {story.priority}
                       </span>
-                      <span className="text-[10px] font-black font-mono text-indigo-400 shrink-0">{story.points} SP</span>
+                      <span className="text-[10px] font-extrabold font-mono text-primary-soft shrink-0">{story.points} SP</span>
                     </div>
                   ))}
                 </div>
                 <div className="mt-5 pt-4 border-t border-white/5 flex gap-3 flex-wrap">
-                  <Link href={`/dashboard/${sessionId}/sprint`} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors">
-                    ⚡ Full Sprint Plan
+                  <Link href={`/dashboard/${sessionId}/sprint`} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition-colors">Full Sprint Plan
                   </Link>
                   <Link href={`/dashboard/${sessionId}/export`} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-white/10 hover:border-white/20 text-slate-300 text-xs font-semibold transition-colors">
-                    ⬇️ Export to Jira CSV
+                    Export to Jira CSV
                   </Link>
-                  <Link href={`/dashboard/${sessionId}/meeting`} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-white/10 hover:border-white/20 text-slate-300 text-xs font-semibold transition-colors" id="btn-start-meeting">
-                    🎤 Start AI Meeting
+                  <Link href={`/dashboard/${sessionId}/meeting`} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-white/10 hover:border-white/20 text-slate-300 text-xs font-semibold transition-colors" id="btn-start-meeting">Start AI Meeting
                   </Link>
                 </div>
               </div>
             </section>
           </>
         ) : null}
-      </div>
+      </WorkspacePage>
     </div>
   );
 }

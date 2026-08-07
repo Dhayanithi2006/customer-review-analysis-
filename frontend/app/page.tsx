@@ -1,30 +1,116 @@
 "use client";
+
 import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import {
+  Store,
+  Sparkles,
+  CircleDollarSign,
+  FileOutput,
+  Lightbulb,
+  ShieldCheck,
+  Users,
+  Link2,
+  BarChart3,
+  Map,
+  ListTodo,
+} from "lucide-react";
 import { uploadCSV, uploadPlayStore } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { BrandMark } from "@/components/layout/top-nav";
+import { DecisionCenterMock } from "@/components/landing/illustrations";
 
 const TEAM_SIZES = [
-  { id: "solo",      label: "Solo Founder" },
-  { id: "2_5",       label: "2–5 People"  },
-  { id: "5_10_plus", label: "5–10+"       },
+  { id: "solo", label: "Solo Founder" },
+  { id: "2_5", label: "2–5 People" },
+  { id: "5_10_plus", label: "5–10+" },
+];
+
+const NAV_LINKS = [
+  { href: "#product", label: "Product" },
+  { href: "#how", label: "How it works" },
+  { href: "#features", label: "Features" },
+  { href: "#pricing", label: "Pricing" },
+  { href: "#how", label: "Docs" },
+  { href: "/history", label: "Changelog", external: true },
+];
+
+const HERO_CAPS = [
+  { icon: Store, label: "Real app store integration" },
+  { icon: Sparkles, label: "AI issue detection & clustering" },
+  { icon: CircleDollarSign, label: "Revenue impact scoring" },
+  { icon: FileOutput, label: "Jira-ready roadmaps" },
+];
+
+const FEATURES = [
+  {
+    icon: Lightbulb,
+    title: "Actionable Insights",
+    desc: "Turn thousands of reviews into ranked product decisions your team can ship.",
+    tone: "bg-primary/10 text-[#6D5DF6]",
+  },
+  {
+    icon: CircleDollarSign,
+    title: "Revenue Impact",
+    desc: "See what’s costing you money — severity, reach, and ARPU in one score.",
+    tone: "bg-red-500/10 text-red-500",
+  },
+  {
+    icon: FileOutput,
+    title: "Jira-Ready Output",
+    desc: "Export sprint CSVs and roadmap markdown your eng team can pull tomorrow.",
+    tone: "bg-emerald-500/10 text-emerald-600",
+  },
+  {
+    icon: Link2,
+    title: "Evidence-Backed",
+    desc: "Every recommendation links to real customer quotes and confidence scores.",
+    tone: "bg-amber-500/10 text-amber-600",
+  },
+  {
+    icon: Users,
+    title: "Built for Teams",
+    desc: "Founders, PMs, and eng share one decision stream — not scattered reports.",
+    tone: "bg-sky-500/10 text-sky-600",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Production Pipeline",
+    desc: "Deterministic cleaning, clustering, and ranking — not a one-off chatbot prompt.",
+    tone: "bg-violet-500/10 text-violet-600",
+  },
+];
+
+const STATS = [
+  { icon: CircleDollarSign, value: "₹2.84L", label: "Revenue at risk surfaced" },
+  { icon: ShieldCheck, value: "18", label: "Critical issues prioritized" },
+  { icon: BarChart3, value: "2,041", label: "Reviews analysed" },
+  { icon: Sparkles, value: "94%", label: "AI confidence score" },
+  { icon: Map, value: "6 weeks", label: "Roadmaps generated" },
+  { icon: ListTodo, value: "24", label: "User stories created" },
 ];
 
 export default function HomePage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [mode, setMode]         = useState<"play_store" | "csv">("play_store");
-  const [appId, setAppId]       = useState("com.spotify.music");
-  const [file, setFile]         = useState<File | null>(null);
+  const [mode, setMode] = useState<"play_store" | "csv">("play_store");
+  const [appId, setAppId] = useState("com.spotify.music");
+  const [file, setFile] = useState<File | null>(null);
   const [teamSize, setTeamSize] = useState("2_5");
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [error, setError]       = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [mobileNav, setMobileNav] = useState(false);
 
   const handleFile = (f: File) => {
-    if (!f.name.endsWith(".csv")) { setError("Please upload a .csv file."); return; }
+    if (!f.name.endsWith(".csv")) {
+      setError("Please upload a .csv file.");
+      return;
+    }
     setFile(f);
     setError(null);
   };
@@ -33,762 +119,523 @@ export default function HomePage() {
     e.preventDefault();
     setDragOver(false);
     const f = e.dataTransfer.files[0];
-    if (f) handleFile(f);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (f) {
+      if (!f.name.endsWith(".csv")) {
+        setError("Please upload a .csv file.");
+        return;
+      }
+      setFile(f);
+      setError(null);
+    }
   }, []);
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (overrideAppId?: string) => {
     setUploading(true);
     setError(null);
     try {
-      if (mode === "play_store") {
-        if (!appId.trim()) { setError("Please enter a Play Store App Package ID."); setUploading(false); return; }
-        const result = await uploadPlayStore(appId.trim(), 200, teamSize);
+      if (mode === "play_store" || overrideAppId) {
+        const id = (overrideAppId || appId).trim();
+        if (!id) {
+          setError("Please enter a Play Store App Package ID.");
+          setUploading(false);
+          return;
+        }
+        const result = await uploadPlayStore(id, 200, teamSize);
         router.push(`/dashboard/${result.session_id}/processing`);
       } else {
-        if (!file) { setError("Please select a CSV file."); setUploading(false); return; }
+        if (!file) {
+          setError("Please select a CSV file.");
+          setUploading(false);
+          return;
+        }
         const result = await uploadCSV(file, "csv", teamSize);
         router.push(`/dashboard/${result.session_id}/processing`);
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Processing failed. Please try again.");
+      setError(
+        err instanceof Error ? err.message : "Processing failed. Please try again."
+      );
       setUploading(false);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-[#08090e] text-slate-100 overflow-x-hidden font-sans">
+  const runSample = () => {
+    setMode("play_store");
+    setAppId("com.spotify.music");
+    void handleSubmit("com.spotify.music");
+  };
 
-      {/* Ambient background */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-[-20%] left-[15%] w-[700px] h-[700px] bg-indigo-600/6 rounded-full blur-[140px]" />
-        <div className="absolute top-[5%] right-[5%] w-[450px] h-[450px] bg-cyan-500/4 rounded-full blur-[110px]" />
+  return (
+    <div className="min-h-screen bg-background text-white overflow-x-hidden">
+      {/* Atmosphere */}
+      <div className="fixed inset-0 pointer-events-none z-0" aria-hidden>
+        <div className="absolute top-[-18%] left-[5%] w-[640px] h-[640px] rounded-full bg-primary/[0.08] blur-[140px]" />
+        <div className="absolute top-[20%] right-[-8%] w-[520px] h-[520px] rounded-full bg-primary/[0.05] blur-[130px]" />
       </div>
 
-      {/* ─────────────────────────── NAVBAR ─────────────────────────── */}
-      <nav className="sticky top-0 z-50 border-b border-white/6 bg-[#08090e]/90 backdrop-blur-xl">
-        <div className="mx-auto max-w-screen-xl px-6 flex items-center justify-between h-14">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center text-sm shadow-[0_0_14px_rgba(99,102,241,0.45)]">
-              🗺️
-            </div>
-            <span className="font-black text-sm tracking-tight">RoadmapAI</span>
+      {/* ── Nav ───────────────────────────────────────────────────────── */}
+      <nav className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-xl">
+        <div className="mx-auto max-w-screen-xl px-5 md:px-8 flex items-center justify-between h-14 gap-4">
+          <BrandMark />
+
+          <div className="hidden lg:flex items-center gap-6">
+            {NAV_LINKS.map((link) =>
+              link.external ? (
+                <Link
+                  key={link.label}
+                  href={link.href}
+                  className="text-xs font-medium text-slate-400 hover:text-white transition-colors"
+                >
+                  {link.label}
+                </Link>
+              ) : (
+                <a
+                  key={link.label}
+                  href={link.href}
+                  className="text-xs font-medium text-slate-400 hover:text-white transition-colors"
+                >
+                  {link.label}
+                </a>
+              )
+            )}
           </div>
-          <div className="flex items-center gap-6">
-            <a href="#how-it-works" className="text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors hidden sm:block">How it Works</a>
-            <a href="#decision-example" className="text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors hidden sm:block">Example</a>
-            <a href="#sources" className="text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors hidden sm:block">Sources</a>
-            <Link href="/history" className="text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors">Past Sessions</Link>
-            <Link href="/register" className="text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors hidden sm:block">Register Business</Link>
-            <a href="#analyze" className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors">
-              Get Started
-            </a>
+
+          <div className="hidden md:flex items-center gap-2.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={runSample}
+              disabled={uploading}
+            >
+              Try Sample Data
+            </Button>
+            <Button asChild size="sm">
+              <a href="#cta">Get Started Free →</a>
+            </Button>
           </div>
+
+          <button
+            type="button"
+            className="md:hidden w-9 h-9 rounded-xl border border-white/10 flex items-center justify-center text-slate-300"
+            onClick={() => setMobileNav((v) => !v)}
+            aria-label="Toggle menu"
+          >
+            <span className="text-lg leading-none">{mobileNav ? "×" : "☰"}</span>
+          </button>
         </div>
+
+        {mobileNav && (
+          <div className="md:hidden border-t border-border px-5 py-4 flex flex-col gap-3 bg-background/95 animate-fade-in">
+            {NAV_LINKS.map((link) =>
+              link.external ? (
+                <Link
+                  key={link.label}
+                  href={link.href}
+                  className="text-sm text-slate-300 py-1"
+                  onClick={() => setMobileNav(false)}
+                >
+                  {link.label}
+                </Link>
+              ) : (
+                <a
+                  key={link.label}
+                  href={link.href}
+                  className="text-sm text-slate-300 py-1"
+                  onClick={() => setMobileNav(false)}
+                >
+                  {link.label}
+                </a>
+              )
+            )}
+            <Button type="button" variant="outline" size="sm" onClick={runSample} disabled={uploading}>
+              Try Sample Data
+            </Button>
+            <Button asChild size="sm">
+              <a href="#cta" onClick={() => setMobileNav(false)}>
+                Get Started Free →
+              </a>
+            </Button>
+          </div>
+        )}
       </nav>
 
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      {/* SECTION 1 — HERO                                               */}
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      <section className="relative min-h-[92vh] flex items-center" id="hero">
-        <div className="mx-auto max-w-screen-xl px-6 w-full py-20">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
-
-            {/* Left */}
-            <div className="animate-fade-in-up">
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-indigo-500/25 bg-indigo-500/8 text-xs font-semibold text-indigo-300 mb-8">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                AI Product Decision Intelligence Platform
-              </div>
-
-              <h1 className="text-5xl sm:text-6xl font-black tracking-tight leading-[1.06] mb-6">
-                Turn customer feedback into{" "}
-                <span className="bg-gradient-to-r from-indigo-400 via-violet-400 to-cyan-400 bg-clip-text text-transparent">
-                  revenue-driven
-                </span>{" "}
-                product decisions.
-              </h1>
-
-              <p className="text-lg text-slate-400 leading-relaxed mb-8 max-w-lg">
-                Know exactly what to build next before revenue drops. Collect feedback from any source, automatically identify the issues costing you the most, and generate an evidence-backed sprint plan.
-              </p>
-
-              <ul className="flex flex-col gap-2 mb-10">
-                {[
-                  "Collect customer feedback from multiple sources",
-                  "Automatically categorize and cluster feedback by impact",
-                  "Prioritize high-revenue problems — not just popular requests",
-                  "Generate roadmap and Jira-ready sprint recommendations",
-                ].map((item, i) => (
-                  <li key={i} className="flex items-start gap-2.5 text-sm text-slate-300">
-                    <span className="mt-0.5 w-4 h-4 rounded-full bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 text-[10px] shrink-0">✓</span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-
-              <div className="flex gap-3 flex-wrap">
-                <a href="#analyze" className="px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition-all shadow-[0_0_24px_rgba(99,102,241,0.35)] hover:shadow-[0_0_36px_rgba(99,102,241,0.5)]">
-                  Analyze Customer Feedback →
-                </a>
-                <a href="#decision-example" className="px-6 py-3 rounded-xl border border-white/10 hover:border-white/20 bg-white/3 hover:bg-white/6 text-slate-200 text-sm font-semibold transition-all">
-                  View Live Example
-                </a>
-              </div>
-            </div>
-
-            {/* Right — Realistic Dashboard Preview */}
-            <div className="animate-fade-in-up hidden lg:block" style={{ animationDelay: "0.15s" }}>
-              <div className="rounded-2xl border border-white/8 bg-[#0d0f1a] shadow-[0_32px_80px_rgba(0,0,0,0.5)] overflow-hidden">
-                {/* Window chrome */}
-                <div className="flex items-center gap-2 px-4 py-3 border-b border-white/6 bg-[#0a0c14]">
-                  <div className="w-3 h-3 rounded-full bg-red-500/70" />
-                  <div className="w-3 h-3 rounded-full bg-amber-500/70" />
-                  <div className="w-3 h-3 rounded-full bg-emerald-500/70" />
-                  <span className="ml-3 text-xs text-slate-600 font-mono">roadmapai.app/dashboard</span>
+      <main className="relative z-10">
+        {/* ── Hero ────────────────────────────────────────────────────── */}
+        <section id="product" className="relative pt-12 pb-16 lg:pt-16 lg:pb-24">
+          <div className="mx-auto max-w-screen-xl px-5 md:px-8">
+            <div className="grid lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] gap-12 lg:gap-10 items-center">
+              <div className="animate-fade-in-up">
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-primary/30 bg-primary/10 text-[11px] font-semibold text-primary-soft-2 mb-6">
+                  <Sparkles className="size-3.5" aria-hidden />
+                  AI-Powered Product Intelligence
                 </div>
 
-                {/* Dashboard mockup content */}
-                <div className="p-5 space-y-4">
-                  {/* Analysis Health bar */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-500">Analysis Quality</span>
-                    <span className="text-xs font-bold text-emerald-400">96% ✓</span>
-                  </div>
+                <h1 className="text-[2.25rem] sm:text-5xl lg:text-[3.15rem] font-extrabold tracking-tight leading-[1.08] text-white mb-5">
+                  Turn customer feedback into{" "}
+                  <span className="text-gradient">revenue-driving product decisions</span>.
+                </h1>
 
-                  {/* Metric row */}
-                  <div className="grid grid-cols-3 gap-2.5">
-                    {[
-                      { label: "Revenue at Risk", value: "₹3.8L", color: "text-red-400" },
-                      { label: "Critical Issues", value: "4", color: "text-amber-400" },
-                      { label: "Reviews Analysed", value: "2,041", color: "text-indigo-400" },
-                    ].map((m, i) => (
-                      <div key={i} className="rounded-xl bg-[#161827] border border-white/5 p-3">
-                        <p className="text-[10px] text-slate-500 mb-1">{m.label}</p>
-                        <p className={`text-base font-black font-mono ${m.color}`}>{m.value}</p>
-                      </div>
-                    ))}
-                  </div>
+                <p className="text-base sm:text-lg text-slate-400 leading-relaxed max-w-lg mb-8">
+                  Collect reviews from multiple sources, uncover critical issues, calculate
+                  business impact, and get AI-powered roadmaps your team can execute.
+                </p>
 
-                  {/* Priority list */}
-                  <div className="space-y-2">
-                    <p className="text-[10px] uppercase tracking-widest text-slate-600 font-bold">Priority Issues</p>
-                    {[
-                      { rank: 1, key: "PAYMENT_RETRIES_FAIL", cat: "Bug", count: 623, risk: "₹2.1L", sev: 9 },
-                      { rank: 2, key: "CHECKOUT_CRASH",        cat: "Bug", count: 318, risk: "₹1.2L", sev: 8 },
-                      { rank: 3, key: "AUTH_SESSION_EXPIRE",   cat: "Bug", count: 204, risk: "₹0.5L", sev: 7 },
-                    ].map((issue) => (
-                      <div key={issue.rank} className="flex items-center gap-3 p-3 rounded-xl border border-white/5 bg-[#161827] hover:border-indigo-500/20 transition-colors">
-                        <span className="text-xs font-black text-slate-500 w-4">#{issue.rank}</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[11px] font-bold text-slate-200 truncate">{issue.key.replace(/_/g, " ")}</p>
-                          <p className="text-[10px] text-slate-500">{issue.count} reviews · {issue.cat}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs font-bold text-red-400">{issue.risk}</p>
-                          <div className="flex items-center gap-1 justify-end">
-                            <div className="h-1 w-8 rounded-full bg-white/5 overflow-hidden">
-                              <div className="h-full bg-red-500 rounded-full" style={{ width: `${(issue.sev / 10) * 100}%` }} />
-                            </div>
-                            <span className="text-[9px] text-slate-600">{issue.sev}/10</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* CTA bar */}
-                  <div className="flex gap-2">
-                    <div className="flex-1 py-2 text-center rounded-lg bg-indigo-600/15 border border-indigo-500/25 text-indigo-400 text-[11px] font-semibold">🗺️ View Roadmap</div>
-                    <div className="flex-1 py-2 text-center rounded-lg bg-white/4 border border-white/8 text-slate-400 text-[11px] font-semibold">⚡ Sprint Plan</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      {/* SECTION 2 — WHY COMPANIES LOSE REVENUE                        */}
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      <section className="py-28 border-t border-white/6 bg-[#050508]">
-        <div className="mx-auto max-w-screen-xl px-6">
-          <div className="text-center mb-16">
-            <p className="text-xs uppercase tracking-widest text-indigo-400 font-bold mb-4">The Business Problem</p>
-            <h2 className="text-4xl font-black tracking-tight mb-4">Why companies lose revenue</h2>
-            <p className="text-slate-400 max-w-lg mx-auto">Most companies collect feedback. Very few know what actually matters.</p>
-          </div>
-
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {[
-              {
-                number: "01",
-                title: "Nobody reads the reviews",
-                desc: "Thousands of customer reviews pile up across Play Store, App Store, and support tickets. Zero time to process them.",
-                accent: "text-red-400 border-red-500/20 bg-red-500/4",
-              },
-              {
-                number: "02",
-                title: "Feedback is scattered",
-                desc: "Different teams use different tools. Support has Zendesk, growth has surveys, product has sticky notes. Nothing connects.",
-                accent: "text-amber-400 border-amber-500/20 bg-amber-500/4",
-              },
-              {
-                number: "03",
-                title: "Popular ≠ important",
-                desc: "Companies build what's most requested, not what has the highest revenue impact. The loudest users aren't always the most valuable.",
-                accent: "text-purple-400 border-purple-500/20 bg-purple-500/4",
-              },
-              {
-                number: "04",
-                title: "Revenue-impacting bugs go unnoticed",
-                desc: "A payment failure affecting 300 premium users hides inside 10,000 reviews. By the time it's found, customers have churned.",
-                accent: "text-indigo-400 border-indigo-500/20 bg-indigo-500/4",
-              },
-            ].map((card, i) => (
-              <div key={i} className={`rounded-2xl border p-6 ${card.accent} transition-all hover:-translate-y-1 duration-200`}>
-                <div className={`text-4xl font-black font-mono mb-5 opacity-30 ${card.accent.split(" ")[0]}`}>{card.number}</div>
-                <h3 className="font-bold text-slate-100 mb-3 text-sm leading-snug">{card.title}</h3>
-                <p className="text-slate-400 text-xs leading-relaxed">{card.desc}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-14 text-center">
-            <p className="text-lg font-semibold text-slate-200">
-              Most companies collect feedback.{" "}
-              <span className="text-indigo-400">Very few know what actually matters.</span>
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      {/* SECTION 3 — HOW BETTER PRODUCT DECISIONS ARE MADE             */}
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      <section className="py-28 border-t border-white/6" id="how-it-works">
-        <div className="mx-auto max-w-screen-xl px-6">
-          <div className="text-center mb-16">
-            <p className="text-xs uppercase tracking-widest text-indigo-400 font-bold mb-4">The RoadmapAI Decision Engine</p>
-            <h2 className="text-4xl font-black tracking-tight mb-4">How better product decisions are made</h2>
-            <p className="text-slate-400 max-w-lg mx-auto">A deterministic 7-step pipeline — not a chatbot prompt. Every decision is evidence-backed.</p>
-          </div>
-
-          <div className="relative max-w-4xl mx-auto">
-            {/* Vertical connector line */}
-            <div className="absolute left-6 top-10 bottom-10 w-px bg-gradient-to-b from-indigo-500/50 via-purple-500/30 to-cyan-500/20 hidden lg:block" />
-
-            <div className="flex flex-col gap-4">
-              {[
-                { step: "01", icon: "📥", title: "Customer Feedback Ingested", desc: "Play Store, App Store, CSV, and support tickets — normalized into one unified schema.", color: "indigo" },
-                { step: "02", icon: "🧹", title: "AI Categorization", desc: "Gemini Flash categorizes each review by type (Bug, UX, Feature Request, Performance) and business area.", color: "violet" },
-                { step: "03", icon: "🔗", title: "Issue Clustering", desc: "Similar complaints are grouped into issue clusters. 400 different phrasing of the same payment bug become one cluster.", color: "purple" },
-                { step: "04", icon: "💰", title: "Revenue Impact Calculated", desc: "Every cluster gets a revenue-at-risk score based on premium user count, severity, and review volume.", color: "fuchsia" },
-                { step: "05", icon: "📊", title: "Priority Engine Runs", desc: "A deterministic formula (not AI guesswork) ranks every issue by business impact. Bugs costing revenue rank above popular requests.", color: "pink" },
-                { step: "06", icon: "🗺️", title: "6-Week Roadmap Generated", desc: "Issues are sequenced by effort and impact into a realistic 6-week product roadmap.", color: "rose" },
-                { step: "07", icon: "⚡", title: "Jira Sprint Created", desc: "Full sprint plan with user stories, acceptance criteria, and story points — ready to import.", color: "orange" },
-              ].map((step, i) => (
-                <div key={i} className="flex gap-6 items-start group">
-                  <div className="shrink-0 w-12 h-12 rounded-xl bg-[#0f111a] border border-white/8 flex items-center justify-center text-xl shadow-sm group-hover:border-indigo-500/30 transition-colors">
-                    {step.icon}
-                  </div>
-                  <div className="flex-1 pt-2.5 pb-5 border-b border-white/5 last:border-0">
-                    <div className="flex items-baseline gap-3 mb-1.5">
-                      <span className="text-[10px] font-mono font-bold text-slate-600">{step.step}</span>
-                      <h3 className="font-bold text-slate-100 text-sm">{step.title}</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-3 mb-9">
+                  {HERO_CAPS.map(({ icon: Icon, label }) => (
+                    <div key={label} className="flex items-center gap-2.5 text-sm text-slate-300">
+                      <span className="w-8 h-8 rounded-xl bg-surface-2 border border-white/[0.08] flex items-center justify-center text-primary-soft shrink-0">
+                        <Icon className="size-3.5" aria-hidden />
+                      </span>
+                      {label}
                     </div>
-                    <p className="text-slate-400 text-xs leading-relaxed">{step.desc}</p>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <Button asChild size="lg">
+                    <a href="#cta">Analyze Your Reviews →</a>
+                  </Button>
+                  <Button asChild variant="outline" size="lg">
+                    <a href="#product-preview">View Demo Dashboard</a>
+                  </Button>
+                </div>
+              </div>
+
+              <div
+                id="product-preview"
+                className="animate-fade-in-up"
+                style={{ animationDelay: "120ms" }}
+              >
+                <DecisionCenterMock />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Features (light) ────────────────────────────────────────── */}
+        <section id="features" className="bg-marketing text-marketing-foreground py-20 md:py-24">
+          <div className="mx-auto max-w-screen-xl px-5 md:px-8">
+            <div className="text-center max-w-2xl mx-auto mb-12 md:mb-14">
+              <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-marketing-foreground">
+                What you get with RoadmapAI
+              </h2>
+              <p className="mt-3 text-base text-slate-600 leading-relaxed">
+                Everything you need to go from feedback to shipped features.
+              </p>
+            </div>
+
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
+              {FEATURES.map(({ icon: Icon, title, desc, tone }) => (
+                <div
+                  key={title}
+                  className="rounded-[18px] bg-marketing-card border border-slate-200/80 p-6 shadow-[0_8px_24px_rgba(15,23,42,0.04)] hover:shadow-[0_12px_32px_rgba(15,23,42,0.08)] transition-shadow"
+                >
+                  <div
+                    className={`w-11 h-11 rounded-xl flex items-center justify-center mb-4 ${tone}`}
+                  >
+                    <Icon className="size-5" aria-hidden />
                   </div>
+                  <h3 className="text-lg font-bold text-marketing-foreground mb-2 tracking-tight">
+                    {title}
+                  </h3>
+                  <p className="text-sm text-slate-600 leading-relaxed">{desc}</p>
                 </div>
               ))}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      {/* SECTION 4 — REVENUE IMPACT CARDS                              */}
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      <section className="py-28 border-t border-white/6 bg-[#050508]">
-        <div className="mx-auto max-w-screen-xl px-6">
-          <div className="text-center mb-16">
-            <p className="text-xs uppercase tracking-widest text-red-400 font-bold mb-4">Revenue Intelligence</p>
-            <h2 className="text-4xl font-black tracking-tight mb-4">Every analysis shows your revenue exposure</h2>
-            <p className="text-slate-400 max-w-md mx-auto">Translated from customer frustration into numbers your CEO understands.</p>
-          </div>
-
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {[
-              {
-                icon: "🔴",
-                label: "Revenue at Risk",
-                value: "₹3.8L",
-                desc: "Estimated monthly revenue at risk from unresolved critical bugs. Calculated from premium user count × ARPU.",
-                why: "Quantifies the cost of not fixing the issue.",
-              },
-              {
-                icon: "⚠️",
-                label: "Critical Issues",
-                value: "4",
-                desc: "The number of issue clusters with severity ≥ 8 affecting paying customers. Requires immediate sprint attention.",
-                why: "Separates signal from noise automatically.",
-              },
-              {
-                icon: "📉",
-                label: "Estimated Churn",
-                value: "12%",
-                desc: "Projected subscriber churn if top 2 critical bugs remain unresolved for the next 30 days.",
-                why: "Makes the cost of delay visible and urgent.",
-              },
-              {
-                icon: "👑",
-                label: "Premium Users Affected",
-                value: "127",
-                desc: "Number of paying or premium-tier users experiencing the highest-priority issues. Directly tied to MRR.",
-                why: "Ensures premium users get priority attention.",
-              },
-              {
-                icon: "🏆",
-                label: "Top Revenue Loss",
-                value: "PAYMENT_RETRIES_FAIL",
-                desc: "The single highest-impact issue cluster, responsible for 55% of total revenue at risk across all sessions.",
-                why: "One issue to fix first. No ambiguity.",
-              },
-              {
-                icon: "✅",
-                label: "Recovery Potential",
-                value: "+18%",
-                desc: "Expected revenue recovery after resolving the top 3 critical issues in one sprint cycle.",
-                why: "Connects product work directly to business outcomes.",
-              },
-            ].map((card, i) => (
-              <div key={i} className="rounded-2xl border border-white/7 bg-[#0d0f1a] p-6 hover:border-white/12 transition-all duration-200 hover:-translate-y-0.5 group">
-                <div className="flex items-start justify-between mb-4">
-                  <span className="text-2xl">{card.icon}</span>
-                  <span className="text-[10px] font-mono font-bold text-slate-600 uppercase">Why it matters</span>
-                </div>
-                <p className="text-[11px] text-slate-500 uppercase tracking-wider font-bold mb-2">{card.label}</p>
-                <p className="text-2xl font-black font-mono text-slate-100 mb-3">{card.value}</p>
-                <p className="text-xs text-slate-400 leading-relaxed mb-3">{card.desc}</p>
-                <div className="pt-3 border-t border-white/5 text-xs text-indigo-400 font-medium">{card.why}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      {/* SECTION 5 — DECISION EXAMPLE (HIGH IMPACT)                    */}
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      <section className="py-28 border-t border-white/6" id="decision-example">
-        <div className="mx-auto max-w-screen-xl px-6">
-          <div className="text-center mb-16">
-            <p className="text-xs uppercase tracking-widest text-indigo-400 font-bold mb-4">Decision Intelligence</p>
-            <h2 className="text-4xl font-black tracking-tight mb-4">From raw reviews to an actionable decision</h2>
-            <p className="text-slate-400 max-w-lg mx-auto">This is how RoadmapAI transforms 623 scattered complaints into a single, confident business decision.</p>
-          </div>
-
-          <div className="grid lg:grid-cols-2 gap-6 items-start max-w-5xl mx-auto">
-            {/* LEFT — Raw Reviews */}
-            <div className="rounded-2xl border border-white/8 bg-[#0d0f1a] overflow-hidden">
-              <div className="px-5 py-4 border-b border-white/6 flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                <span className="text-xs font-bold text-slate-300">623 Raw Customer Reviews</span>
-                <span className="ml-auto text-[10px] text-slate-600 font-mono">Google Play Store</span>
-              </div>
-              <div className="p-5 space-y-3">
-                {[
-                  { text: "Payment failed after update. Money deducted but order not placed.", rating: "★☆☆☆☆", date: "2 days ago" },
-                  { text: "Money deducted but order was not placed. This is unacceptable.", rating: "★☆☆☆☆", date: "3 days ago" },
-                  { text: "Unable to retry payment. App just shows loading spinner forever.", rating: "★★☆☆☆", date: "4 days ago" },
-                  { text: "UPI timeout every single time. Lost ₹2,000. Please fix urgently.", rating: "★☆☆☆☆", date: "5 days ago" },
-                  { text: "Checkout button does nothing after payment confirmation screen.", rating: "★★☆☆☆", date: "6 days ago" },
-                  { text: "Payment gateway keeps timing out. Third time this week.", rating: "★☆☆☆☆", date: "1 week ago" },
-                ].map((review, i) => (
-                  <div key={i} className="p-3.5 rounded-xl bg-[#161827] border border-white/5">
-                    <p className="text-xs text-slate-300 leading-relaxed mb-2">&ldquo;{review.text}&rdquo;</p>
-                    <div className="flex items-center gap-3 text-[10px] text-slate-600">
-                      <span className="text-amber-500/70">{review.rating}</span>
-                      <span>{review.date}</span>
-                    </div>
-                  </div>
-                ))}
-                <div className="text-center pt-2">
-                  <span className="text-[10px] text-slate-600">+ 617 more reviews with similar themes…</span>
-                </div>
-              </div>
+        {/* ── Stats ───────────────────────────────────────────────────── */}
+        <section className="bg-marketing-muted border-y border-slate-200/80 py-12 md:py-14">
+          <div className="mx-auto max-w-screen-xl px-5 md:px-8">
+            <div className="text-center mb-8 md:mb-10">
+              <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-marketing-foreground">
+                RoadmapAI in numbers
+              </h2>
+              <p className="mt-2 text-sm text-slate-600">
+                Illustrative outcomes from a Play Store analysis run — your results will vary by app.
+              </p>
             </div>
-
-            {/* RIGHT — RoadmapAI Decision */}
-            <div className="space-y-4">
-              {/* Arrow label */}
-              <div className="flex items-center gap-3 justify-center lg:justify-start mb-2">
-                <div className="h-px flex-1 max-w-[60px] bg-gradient-to-r from-transparent to-indigo-500/50" />
-                <span className="text-xs font-bold text-indigo-400">RoadmapAI Decision</span>
-                <div className="h-px flex-1 max-w-[60px] bg-gradient-to-l from-transparent to-indigo-500/50" />
-              </div>
-
-              {/* Decision card */}
-              <div className="rounded-2xl border border-indigo-500/25 bg-gradient-to-br from-indigo-500/8 to-violet-500/4 p-6">
-                <div className="flex items-center gap-2 mb-5">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-500 flex items-center justify-center text-sm">🎯</div>
-                  <div>
-                    <p className="text-[10px] text-indigo-300 uppercase tracking-widest font-bold">Issue Cluster Identified</p>
-                    <h3 className="font-black text-slate-100 text-lg tracking-tight">Payment Failure</h3>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 mb-5">
-                  {[
-                    { label: "Frequency",          value: "623 Reviews",  color: "text-slate-100" },
-                    { label: "Severity",            value: "Critical",     color: "text-red-400" },
-                    { label: "Est. Revenue Loss",   value: "₹3.8L/mo",    color: "text-red-400" },
-                    { label: "Premium Users",       value: "127 affected", color: "text-amber-400" },
-                  ].map((m, i) => (
-                    <div key={i} className="p-3 rounded-xl bg-black/20 border border-white/6">
-                      <p className="text-[10px] text-slate-500 mb-1">{m.label}</p>
-                      <p className={`text-sm font-black font-mono ${m.color}`}>{m.value}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="p-4 rounded-xl bg-indigo-500/12 border border-indigo-500/20 mb-4">
-                  <p className="text-[10px] text-indigo-300 uppercase tracking-wider font-bold mb-1">AI Recommendation</p>
-                  <p className="text-sm font-semibold text-slate-100">Move to Sprint 12 · Highest priority</p>
-                </div>
-
-                <div className="flex items-center gap-2 p-3.5 rounded-xl bg-emerald-500/8 border border-emerald-500/20">
-                  <span className="text-emerald-400">↑</span>
-                  <p className="text-xs text-emerald-300 font-semibold">Expected Revenue Recovery: <span className="font-black">+18%</span> after resolution</p>
-                </div>
-              </div>
-
-              {/* Sprint card */}
-              <div className="rounded-2xl border border-white/8 bg-[#0d0f1a] p-5">
-                <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-3">Generated Sprint Story</p>
-                <p className="text-sm font-bold text-slate-100 mb-2">Fix UPI Payment Retry on Timeout</p>
-                <p className="text-xs text-slate-400 italic mb-3">&ldquo;As a premium user, when my UPI payment times out I want the app to automatically retry so that I don&apos;t lose my order.&rdquo;</p>
-                <div className="flex gap-2 text-[10px]">
-                  <span className="px-2.5 py-1 rounded-md bg-red-500/12 border border-red-500/25 text-red-400 font-semibold">Critical</span>
-                  <span className="px-2.5 py-1 rounded-md bg-indigo-500/12 border border-indigo-500/25 text-indigo-400 font-semibold">5 Story Points</span>
-                  <span className="px-2.5 py-1 rounded-md bg-white/6 border border-white/8 text-slate-400 font-semibold">Sprint 12</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      {/* SECTION 6 — INTELLIGENT COUNTER EXAMPLE                       */}
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      <section className="py-20 border-t border-white/6 bg-[#050508]">
-        <div className="mx-auto max-w-screen-xl px-6">
-          <div className="max-w-5xl mx-auto">
-            <div className="text-center mb-12">
-              <p className="text-xs uppercase tracking-widest text-slate-500 font-bold mb-4">Intelligent Prioritization</p>
-              <h2 className="text-3xl font-black tracking-tight mb-3">Not every request is equal</h2>
-              <p className="text-slate-400 max-w-md mx-auto">521 users asked for dark mode. RoadmapAI explains exactly why you shouldn&apos;t build it next.</p>
-            </div>
-
-            <div className="grid lg:grid-cols-2 gap-6 items-center">
-              {/* Reviews */}
-              <div className="rounded-2xl border border-white/8 bg-[#0d0f1a] p-5">
-                <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-4">521 Feature Requests</p>
-                <div className="space-y-2.5">
-                  {[
-                    "Need dark mode. My eyes hurt at night using this app.",
-                    "OLED mode would be amazing, pure black background please!",
-                    "Night theme is essential. Every other app has it.",
-                    "Please add a dark UI option, the white is blinding.",
-                    "Dark mode when? Been waiting 2 years for this.",
-                  ].map((text, i) => (
-                    <div key={i} className="flex gap-3 items-start p-3 rounded-xl bg-[#161827] border border-white/5">
-                      <span className="text-slate-600 text-xs mt-0.5">◦</span>
-                      <p className="text-xs text-slate-300 leading-relaxed">&ldquo;{text}&rdquo;</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Decision */}
-              <div className="space-y-4">
-                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/4 p-6">
-                  <p className="text-[10px] text-amber-400 uppercase tracking-widest font-bold mb-4">RoadmapAI Ruling</p>
-
-                  <div className="grid grid-cols-2 gap-3 mb-5">
-                    {[
-                      { label: "Frequency",      value: "521 Reviews", color: "text-slate-100" },
-                      { label: "Revenue Impact", value: "Low",         color: "text-slate-400" },
-                      { label: "Priority Rank",  value: "#7",          color: "text-slate-400" },
-                      { label: "Sprint",         value: "Backlog",     color: "text-slate-400" },
-                    ].map((m, i) => (
-                      <div key={i} className="p-3 rounded-xl bg-black/20 border border-white/6">
-                        <p className="text-[10px] text-slate-500 mb-1">{m.label}</p>
-                        <p className={`text-sm font-black font-mono ${m.color}`}>{m.value}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="p-4 rounded-xl bg-black/20 border border-white/8">
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-2">Why not now?</p>
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      Fixing payment failures recovers <strong className="text-white">₹3.8L/month</strong> in revenue. Dark mode carries{" "}
-                      <strong className="text-white">zero direct revenue impact</strong>. High frequency doesn&apos;t mean high priority.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-xl border border-white/6 bg-[#0d0f1a] text-center">
-                  <p className="text-xs text-slate-400">
-                    Popular requests ≠ important problems.{" "}
-                    <span className="text-indigo-400 font-semibold">Revenue evidence decides priority.</span>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              {STATS.map(({ icon: Icon, value, label }) => (
+                <div
+                  key={label}
+                  className="rounded-[18px] bg-marketing-card border border-slate-200/80 p-4 text-center shadow-[0_4px_16px_rgba(15,23,42,0.04)]"
+                >
+                  <Icon className="size-4 text-primary mx-auto mb-2" aria-hidden />
+                  <p className="text-xl sm:text-2xl font-extrabold font-mono tracking-tight text-marketing-foreground">
+                    {value}
                   </p>
+                  <p className="text-[11px] text-slate-500 mt-1 leading-snug">{label}</p>
                 </div>
-              </div>
+              ))}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      {/* SECTION 7 — SUPPORTED SOURCES                                 */}
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      <section className="py-28 border-t border-white/6" id="sources">
-        <div className="mx-auto max-w-screen-xl px-6">
-          <div className="text-center mb-16">
-            <p className="text-xs uppercase tracking-widest text-indigo-400 font-bold mb-4">Data Sources</p>
-            <h2 className="text-4xl font-black tracking-tight mb-4">Every feedback source. One unified analysis.</h2>
-            <p className="text-slate-400 max-w-lg mx-auto">All sources are normalized into a unified review schema before analysis begins.</p>
-          </div>
-
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl mx-auto">
-            {[
-              { icon: "🤖", name: "Google Play Store",   desc: "Fetch live reviews by Package ID. Auto-scraped.", badge: "Live",        badgeColor: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25" },
-              { icon: "📄", name: "CSV Upload",           desc: "Upload any export. Columns auto-detected.",     badge: "Live",        badgeColor: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25" },
-              { icon: "🍎", name: "App Store",            desc: "Apple App Store review ingestion.",             badge: "Live",        badgeColor: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25" },
-              { icon: "🎧", name: "Support Tickets",      desc: "CSV export from any helpdesk tool.",            badge: "Live",        badgeColor: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25" },
-              { icon: "⭐", name: "Google Reviews",       desc: "Business and product feedback via Google.",     badge: "Coming Soon", badgeColor: "bg-slate-500/15 text-slate-400 border-slate-500/25" },
-              { icon: "🔗", name: "Zendesk",              desc: "Direct connector. Bi-directional sync.",        badge: "Coming Soon", badgeColor: "bg-slate-500/15 text-slate-400 border-slate-500/25" },
-              { icon: "💬", name: "Intercom",             desc: "Customer conversations → issue clusters.",     badge: "Coming Soon", badgeColor: "bg-slate-500/15 text-slate-400 border-slate-500/25" },
-            ].map((source, i) => (
-              <div key={i} className="rounded-2xl border border-white/7 bg-[#0d0f1a] p-5 hover:border-white/12 transition-all duration-200 hover:-translate-y-0.5 group">
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-2xl">{source.icon}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${source.badgeColor}`}>{source.badge}</span>
-                </div>
-                <p className="font-bold text-slate-100 text-sm mb-1.5">{source.name}</p>
-                <p className="text-xs text-slate-400 leading-relaxed mb-3">{source.desc}</p>
-                <div className="pt-3 border-t border-white/5">
-                  <p className="text-[10px] text-slate-600 italic">Normalized into one unified schema.</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      {/* SECTION 8 — WHY NOT CHATGPT?                                  */}
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      <section className="py-28 border-t border-white/6 bg-[#050508]">
-        <div className="mx-auto max-w-screen-xl px-6">
-          <div className="text-center mb-16">
-            <p className="text-xs uppercase tracking-widest text-slate-500 font-bold mb-4">Comparison</p>
-            <h2 className="text-4xl font-black tracking-tight mb-4">Why not just use ChatGPT?</h2>
-            <p className="text-slate-400 max-w-md mx-auto">ChatGPT is a conversation. RoadmapAI is a workflow.</p>
-          </div>
-
-          <div className="max-w-3xl mx-auto rounded-2xl border border-white/8 bg-[#0d0f1a] overflow-hidden">
-            {/* Header row */}
-            <div className="grid grid-cols-3 bg-[#0a0c14] border-b border-white/6">
-              <div className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest col-span-1">Capability</div>
-              <div className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest text-center">ChatGPT</div>
-              <div className="px-6 py-4 text-xs font-bold text-indigo-400 uppercase tracking-widest text-center">RoadmapAI</div>
+        {/* ── How it works ────────────────────────────────────────────── */}
+        <section id="how" className="py-20 md:py-24 border-t border-border">
+          <div className="mx-auto max-w-screen-xl px-5 md:px-8">
+            <div className="max-w-2xl mb-12">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-primary-soft font-bold mb-4">
+                How it works
+              </p>
+              <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-[1.15]">
+                From scattered reviews to a shippable plan.
+              </h2>
+              <p className="mt-4 text-base text-slate-400 leading-relaxed max-w-xl">
+                A deterministic pipeline — ingest, cluster, score revenue impact, then generate
+                roadmap and sprint output your team can execute.
+              </p>
             </div>
 
-            {[
-              { capability: "Collect feedback automatically",    chatgpt: false, us: true  },
-              { capability: "Scrape Play Store / App Store",     chatgpt: false, us: true  },
-              { capability: "Group similar complaints",          chatgpt: "Manual prompt", us: true  },
-              { capability: "Calculate revenue at risk",         chatgpt: false, us: true  },
-              { capability: "Prioritize by business impact",     chatgpt: false, us: true  },
-              { capability: "Generate 6-week roadmap",          chatgpt: false, us: true  },
-              { capability: "Create Jira sprint with stories",   chatgpt: false, us: true  },
-              { capability: "Decisions backed by evidence",      chatgpt: false, us: true  },
-              { capability: "Works without re-pasting reviews",  chatgpt: false, us: true  },
-            ].map((row, i) => (
-              <div key={i} className={`grid grid-cols-3 border-b border-white/5 last:border-0 hover:bg-white/[0.015] transition-colors`}>
-                <div className="px-6 py-3.5 text-xs text-slate-300 font-medium">{row.capability}</div>
-                <div className="px-6 py-3.5 text-center">
-                  {row.chatgpt === false ? (
-                    <span className="text-red-500/70 text-sm">✗</span>
-                  ) : (
-                    <span className="text-xs text-slate-500">{row.chatgpt}</span>
-                  )}
+            <div className="grid md:grid-cols-4 gap-4">
+              {[
+                { n: "01", t: "Ingest", d: "Pull Play Store reviews or upload a CSV of customer feedback." },
+                { n: "02", t: "Cluster", d: "AI groups similar complaints into issue clusters with confidence." },
+                { n: "03", t: "Score", d: "Revenue-at-risk ranking separates noise from business-critical work." },
+                { n: "04", t: "Ship", d: "Get a 6-week roadmap, sprint stories, and Jira-ready exports." },
+              ].map((step) => (
+                <div
+                  key={step.n}
+                  className="rounded-[18px] border border-border bg-surface p-5 shadow-[0_2px_12px_rgba(0,0,0,0.28)]"
+                >
+                  <p className="font-mono text-xs font-bold text-primary-soft mb-3">{step.n}</p>
+                  <h3 className="text-base font-bold text-white mb-2">{step.t}</h3>
+                  <p className="text-sm text-slate-400 leading-relaxed">{step.d}</p>
                 </div>
-                <div className="px-6 py-3.5 text-center">
-                  {row.us ? <span className="text-emerald-400 text-sm font-bold">✓</span> : <span className="text-red-500/70 text-sm">✗</span>}
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      {/* SECTION ANALYZE — UPLOAD FORM                                 */}
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      <section className="py-28 border-t border-white/6" id="analyze">
-        <div className="mx-auto max-w-screen-xl px-6">
-          <div className="text-center mb-12">
-            <p className="text-xs uppercase tracking-widest text-indigo-400 font-bold mb-4">Get Started</p>
-            <h2 className="text-4xl font-black tracking-tight mb-4">Analyze your customer feedback</h2>
-            <p className="text-slate-400">Upload a CSV or enter a Play Store app ID. Results in under 3 minutes.</p>
+        {/* ── Pricing ─────────────────────────────────────────────────── */}
+        <section id="pricing" className="py-20 md:py-24 border-t border-border bg-[#0E1424]/50">
+          <div className="mx-auto max-w-screen-xl px-5 md:px-8">
+            <div className="max-w-xl mx-auto text-center mb-10">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-primary-soft font-bold mb-4">
+                Pricing
+              </p>
+              <h2 className="text-3xl font-extrabold tracking-tight text-white">
+                Start free. Prove the ROI first.
+              </h2>
+              <p className="mt-3 text-slate-400 text-sm leading-relaxed">
+                No account required for analysis sessions. Register a workspace when you want a
+                permanent dashboard URL and feedback QR.
+              </p>
+            </div>
+
+            <div className="max-w-md mx-auto rounded-[20px] border border-primary/30 bg-surface p-7 shadow-[0_8px_40px_rgba(0,0,0,0.35)]">
+              <p className="text-sm font-semibold text-primary-soft-2 mb-1">Free during launch</p>
+              <p className="text-4xl font-extrabold text-white mb-4">
+                ₹0<span className="text-lg text-slate-500 font-semibold"> / analysis</span>
+              </p>
+              <ul className="space-y-2.5 mb-7 text-sm text-slate-300">
+                {[
+                  "Play Store + CSV ingest",
+                  "Revenue-ranked decision dashboard",
+                  "6-week roadmap & sprint plan",
+                  "Jira CSV + Markdown export",
+                  "AI meeting on your session data",
+                ].map((item) => (
+                  <li key={item} className="flex items-start gap-2.5">
+                    <span className="mt-1 w-4 h-4 rounded-full bg-primary/20 text-primary-soft flex items-center justify-center text-[10px] shrink-0">
+                      ✓
+                    </span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+              <Button asChild size="lg" className="w-full justify-center">
+                <a href="#cta">Get Started Free →</a>
+              </Button>
+            </div>
           </div>
+        </section>
 
-          <div className="max-w-xl mx-auto">
-            <div className="rounded-2xl border border-white/10 bg-[#0f111a] shadow-[0_0_60px_rgba(99,102,241,0.07)] p-8">
-              {/* Mode toggle */}
+        {/* ── Analyze CTA ─────────────────────────────────────────────── */}
+        <section id="cta" className="py-20 md:py-28 border-t border-border">
+          <div className="mx-auto max-w-screen-xl px-5 md:px-8">
+            <div className="text-center max-w-2xl mx-auto mb-10 md:mb-12">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-primary-soft font-bold mb-4">
+                Analyze
+              </p>
+              <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
+                Ready to see what’s costing you the most?
+              </h2>
+              <p className="mt-3 text-slate-400 text-sm sm:text-base leading-relaxed">
+                Upload feedback or pull Play Store reviews. Get ranked decisions in minutes.
+              </p>
+            </div>
+
+            <div className="max-w-xl mx-auto rounded-[20px] border border-white/[0.08] bg-surface shadow-[0_8px_40px_rgba(0,0,0,0.35)] p-6 sm:p-8">
               <div className="mb-7">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">Choose Source</p>
-                <div className="flex gap-2 p-1 rounded-xl bg-[#161827] border border-white/7">
-                  <button
-                    onClick={() => setMode("play_store")}
-                    className={`flex-1 py-2.5 px-4 rounded-lg font-semibold text-xs transition-all flex items-center justify-center gap-2 ${mode === "play_store" ? "bg-indigo-600 text-white shadow-lg" : "text-slate-400 hover:text-slate-200"}`}
-                  >
-                    🤖 Play Store Scraper
-                  </button>
-                  <button
-                    onClick={() => setMode("csv")}
-                    className={`flex-1 py-2.5 px-4 rounded-lg font-semibold text-xs transition-all flex items-center justify-center gap-2 ${mode === "csv" ? "bg-indigo-600 text-white shadow-lg" : "text-slate-400 hover:text-slate-200"}`}
-                  >
-                    📄 Upload CSV
-                  </button>
-                </div>
+                <p className="page-eyebrow mb-3">Source</p>
+                <SegmentedControl
+                  value={mode}
+                  onChange={(id) => setMode(id as "play_store" | "csv")}
+                  options={[
+                    { id: "play_store", label: "Play Store" },
+                    { id: "csv", label: "Upload CSV" },
+                  ]}
+                />
               </div>
 
-              {/* Team size */}
               <div className="mb-7">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">Team Size</p>
-                <div className="flex gap-2">
-                  {TEAM_SIZES.map(t => (
-                    <button
-                      key={t.id}
-                      id={`team-${t.id}`}
-                      onClick={() => setTeamSize(t.id)}
-                      className={`flex-1 py-2.5 px-3 rounded-xl border-2 text-xs font-semibold transition-all ${teamSize === t.id ? "border-indigo-500 bg-indigo-500/12 text-slate-100" : "border-white/7 bg-[#161827] text-slate-400 hover:border-white/15"}`}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
+                <p className="page-eyebrow mb-3">Team size</p>
+                <SegmentedControl
+                  value={teamSize}
+                  onChange={setTeamSize}
+                  options={TEAM_SIZES.map((t) => ({ id: t.id, label: t.label }))}
+                />
               </div>
 
-              {/* Input */}
               {mode === "play_store" ? (
                 <div className="mb-6">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">Play Store Package ID</p>
-                  <input
+                  <label
+                    htmlFor="input-app-id"
+                    className="block text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500 mb-3"
+                  >
+                    Play Store package ID
+                  </label>
+                  <Input
+                    id="input-app-id"
                     type="text"
                     value={appId}
                     onChange={(e) => setAppId(e.target.value)}
                     placeholder="e.g. com.spotify.music"
-                    className="w-full bg-[#161827] border border-white/10 rounded-xl px-4 py-3.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 font-mono"
+                    className="font-mono"
                   />
-                  <div className="flex gap-2 flex-wrap mt-2 text-xs text-slate-600">
+                  <div className="flex gap-2 flex-wrap mt-3 text-xs text-slate-500">
                     <span>Try:</span>
-                    {["com.spotify.music", "com.whatsapp", "com.duolingo"].map(app => (
-                      <button key={app} onClick={() => setAppId(app)} className="text-indigo-400 hover:underline font-mono">{app}</button>
+                    {["com.spotify.music", "com.whatsapp", "com.duolingo"].map((app) => (
+                      <button
+                        key={app}
+                        type="button"
+                        onClick={() => setAppId(app)}
+                        className="text-primary-soft hover:underline font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded"
+                      >
+                        {app}
+                      </button>
                     ))}
                   </div>
                 </div>
               ) : (
                 <div className="mb-6">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">Upload CSV File</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500 mb-3">
+                    CSV file
+                  </p>
                   <div
                     id="upload-dropzone"
-                    className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${dragOver ? "border-indigo-500 bg-indigo-500/8" : file ? "border-emerald-500/50 bg-emerald-500/5" : "border-white/10 hover:border-indigo-500/40 hover:bg-indigo-500/4"}`}
+                    role="button"
+                    tabIndex={0}
+                    className={`border-2 border-dashed rounded-[18px] p-8 text-center cursor-pointer transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
+                      dragOver
+                        ? "border-primary bg-primary/10"
+                        : file
+                          ? "border-emerald-500/40 bg-emerald-500/5"
+                          : "border-white/10 hover:border-primary/40 hover:bg-primary/[0.04]"
+                    }`}
                     onClick={() => fileInputRef.current?.click()}
-                    onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click();
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOver(true);
+                    }}
                     onDragLeave={() => setDragOver(false)}
                     onDrop={handleDrop}
                   >
-                    <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".csv"
+                      className="hidden"
+                      onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+                    />
                     {file ? (
-                      <div><div className="text-3xl mb-2">✅</div><p className="font-bold text-sm text-slate-100">{file.name}</p><p className="text-xs text-slate-500 mt-1">{(file.size/1024).toFixed(0)} KB · Click to change</p></div>
+                      <div>
+                        <p className="font-bold text-sm text-white">{file.name}</p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          {(file.size / 1024).toFixed(0)} KB · Click to change
+                        </p>
+                      </div>
                     ) : (
-                      <div><div className="text-4xl mb-3 animate-float">📂</div><p className="font-semibold text-sm text-slate-200 mb-1">Drop your CSV here</p><p className="text-xs text-slate-500">or click to browse · max 50 MB</p></div>
+                      <div>
+                        <p className="font-semibold text-sm text-slate-200 mb-1">
+                          Drop your CSV here
+                        </p>
+                        <p className="text-xs text-slate-500">or click to browse · max 50 MB</p>
+                      </div>
                     )}
                   </div>
                 </div>
               )}
 
               {error && (
-                <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-sm mb-4">
-                  ⚠️ {error}
+                <div
+                  role="alert"
+                  className="flex items-center gap-2 p-3 rounded-[14px] bg-red-500/10 border border-red-500/25 text-red-400 text-sm mb-4"
+                >
+                  {error}
                 </div>
               )}
 
               <Button
                 id="btn-analyze"
-                onClick={handleSubmit}
-                disabled={uploading || (mode === "csv" && !file) || (mode === "play_store" && !appId.trim())}
+                onClick={() => handleSubmit()}
+                disabled={
+                  uploading ||
+                  (mode === "csv" && !file) ||
+                  (mode === "play_store" && !appId.trim())
+                }
                 size="lg"
                 className="w-full justify-center"
               >
                 {uploading ? (
-                  <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Analyzing…</>
+                  <>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Analyzing…
+                  </>
                 ) : (
-                  <>🚀 Analyze Customer Feedback</>
+                  "Analyze Your Reviews →"
                 )}
               </Button>
 
-              <p className="text-center text-[11px] text-slate-600 mt-4">
-                No account required · Results in ~3 minutes · Evidence-backed
+              <p className="text-center text-[11px] text-slate-500 mt-4">
+                No account required · Results in minutes · Evidence-backed
               </p>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      {/* SECTION 9 — FINAL CTA                                         */}
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      <section className="py-28 border-t border-white/6 bg-[#050508]">
-        <div className="mx-auto max-w-screen-xl px-6 text-center">
-          <div className="max-w-2xl mx-auto">
-            <h2 className="text-5xl font-black tracking-tight mb-6 leading-tight">
-              Ready to know what is{" "}
-              <span className="bg-gradient-to-r from-red-400 to-orange-400 bg-clip-text text-transparent">costing your company</span>{" "}
-              the most revenue?
-            </h2>
-            <p className="text-slate-400 text-lg mb-10">
-              Stop guessing. Start knowing. 3 minutes from raw reviews to your next sprint plan.
-            </p>
-            <a href="#analyze" className="inline-flex items-center gap-2.5 px-8 py-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-base font-bold transition-all shadow-[0_0_40px_rgba(99,102,241,0.4)] hover:shadow-[0_0_60px_rgba(99,102,241,0.55)]">
-              Analyze Customer Feedback →
-            </a>
+      <footer className="relative z-10 border-t border-border py-10">
+        <div className="mx-auto max-w-screen-xl px-5 md:px-8 flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <BrandMark />
+            <span className="text-slate-600 text-xs hidden sm:inline">
+              AI Product Decision Intelligence
+            </span>
           </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t border-white/6 py-10">
-        <div className="mx-auto max-w-screen-xl px-6 flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center text-xs">🗺️</div>
-            <span className="font-black text-sm tracking-tight text-slate-200">RoadmapAI</span>
-            <span className="text-slate-600 text-xs ml-1">— AI Product Decision Intelligence</span>
-          </div>
-          <div className="flex items-center gap-6 text-xs text-slate-600">
-            <Link href="/history" className="hover:text-slate-400 transition-colors">Past Sessions</Link>
-            <span>Built for Hacklab</span>
+          <div className="flex items-center gap-6 text-xs text-slate-500">
+            <Link
+              href="/history"
+              className="hover:text-slate-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded"
+            >
+              Past sessions
+            </Link>
+            <Link
+              href="/register"
+              className="hover:text-slate-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded"
+            >
+              Register workspace
+            </Link>
           </div>
         </div>
       </footer>
-
     </div>
   );
 }

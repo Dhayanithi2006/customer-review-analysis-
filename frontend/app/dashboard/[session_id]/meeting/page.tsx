@@ -80,7 +80,7 @@ export default function MeetingPage() {
   if (loading) return <PageLoader label="Preparing your AI meeting…" />;
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#08090e]">
+    <div className="min-h-screen flex flex-col bg-background">
       <Navbar
         backHref={`/dashboard/${sessionId}`}
         backLabel="Dashboard"
@@ -115,7 +115,7 @@ export default function MeetingPage() {
       </div>
 
       {/* ── Input area ── */}
-      <div className="shrink-0 border-t border-white/7 bg-[#08090e]/90 backdrop-blur-xl">
+      <div className="shrink-0 border-t border-border bg-background/90 backdrop-blur-xl">
         <div className="mx-auto max-w-2xl px-4 py-4">
           {/* Smart question chips */}
           {questions.length > 0 && (
@@ -126,7 +126,7 @@ export default function MeetingPage() {
                   id={`chip-${i}`}
                   onClick={() => sendMessage(q)}
                   disabled={thinking}
-                  className="text-xs px-3 py-1.5 rounded-full border border-white/10 bg-[#161827] text-slate-400 hover:border-indigo-500/40 hover:text-slate-200 hover:bg-indigo-500/8 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="text-xs px-3 py-1.5 rounded-full border border-white/10 bg-surface-2 text-slate-400 hover:border-primary/40 hover:text-slate-200 hover:bg-primary/10 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 >
                   {q}
                 </button>
@@ -143,7 +143,8 @@ export default function MeetingPage() {
               onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendMessage(input)}
               placeholder="Ask anything about your product data…"
               disabled={thinking}
-              className="flex-1 bg-[#161827] border border-white/10 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/25 transition-all disabled:opacity-50"
+              className="flex-1 bg-surface-2 border border-white/10 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/25 transition-all disabled:opacity-50"
+              aria-label="Ask a question about your product data"
             />
             <Button
               id="btn-send-message"

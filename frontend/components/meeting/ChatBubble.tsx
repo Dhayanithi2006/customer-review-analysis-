@@ -11,7 +11,13 @@ function renderMarkdown(text: string) {
   return text.split("\n").map((line, i) => (
     <p key={i} className={line === "" ? "h-2" : ""}>
       {line.split(/\*\*(.*?)\*\*/g).map((part, j) =>
-        j % 2 === 1 ? <strong key={j} className="text-slate-100 font-bold">{part}</strong> : part
+        j % 2 === 1 ? (
+          <strong key={j} className="text-white font-bold">
+            {part}
+          </strong>
+        ) : (
+          part
+        )
       )}
     </p>
   ));
@@ -24,37 +30,35 @@ export function ChatBubble({ message, sessionId, index }: ChatBubbleProps) {
     <div
       id={`msg-${index}`}
       className={`flex items-start gap-3 animate-fade-in ${isAI ? "" : "flex-row-reverse"}`}
-      style={{ animationDelay: `${index * 0.03}s` }}
+      style={{ animationDelay: `${Math.min(index, 8) * 0.03}s` }}
     >
-      {/* Avatar */}
-      <div className={`w-9 h-9 rounded-full shrink-0 flex items-center justify-center text-base ${
-        isAI
-          ? "bg-gradient-to-br from-indigo-500 to-cyan-500 shadow-[0_0_12px_rgba(99,102,241,0.3)]"
-          : "bg-[#1e2235] border border-white/10"
-      }`}>
-        {isAI ? "🤖" : "👤"}
+      <div
+        className={`w-9 h-9 rounded-full shrink-0 flex items-center justify-center text-xs font-bold ${
+          isAI
+            ? "bg-primary text-white"
+            : "bg-[#1C2538] border border-white/10 text-slate-300"
+        }`}
+        aria-hidden
+      >
+        {isAI ? "AI" : "You"}
       </div>
 
-      {/* Bubble */}
       <div
         className={`text-sm leading-relaxed max-w-[80%] rounded-2xl px-4 py-3 ${
           isAI
-            ? "bg-[#161827] border border-white/7 rounded-tl-sm text-slate-300"
-            : "bg-gradient-to-br from-indigo-500/20 to-cyan-500/15 border border-indigo-500/25 rounded-tr-sm text-slate-200 ml-auto"
+            ? "bg-surface-2 border border-border text-slate-200 rounded-tl-sm"
+            : "bg-primary/15 border border-primary/25 text-slate-200 rounded-tr-sm ml-auto"
         }`}
       >
-        <div className="space-y-0.5">
-          {renderMarkdown(message.content)}
-        </div>
+        <div className="space-y-1">{renderMarkdown(message.content)}</div>
 
-        {/* Referenced issues */}
-        {message.referenced_issues && message.referenced_issues.length > 0 && (
-          <div className="flex gap-2 flex-wrap mt-3 pt-3 border-t border-white/10">
-            {message.referenced_issues.map(key => (
+        {isAI && message.referenced_issues && message.referenced_issues.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-border">
+            {message.referenced_issues.map((key) => (
               <Link
                 key={key}
                 href={`/dashboard/${sessionId}/evidence/${key}`}
-                className="text-xs px-2 py-0.5 bg-indigo-500/15 border border-indigo-500/30 rounded text-indigo-300 font-mono no-underline hover:bg-indigo-500/25 transition-colors"
+                className="text-xs px-2 py-0.5 bg-primary/15 border border-primary/30 rounded text-primary-soft-2 font-mono no-underline hover:bg-primary/25 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               >
                 {key}
               </Link>
@@ -68,18 +72,16 @@ export function ChatBubble({ message, sessionId, index }: ChatBubbleProps) {
 
 export function ThinkingBubble() {
   return (
-    <div className="flex items-start gap-3">
-      <div className="w-9 h-9 rounded-full shrink-0 flex items-center justify-center bg-gradient-to-br from-indigo-500 to-cyan-500">
-        🤖
+    <div className="flex items-start gap-3 animate-fade-in" aria-live="polite" aria-label="AI is thinking">
+      <div className="w-9 h-9 rounded-full shrink-0 flex items-center justify-center text-xs font-bold bg-primary text-white" aria-hidden>
+        AI
       </div>
-      <div className="bg-[#161827] border border-white/7 rounded-2xl rounded-tl-sm px-4 py-3 flex gap-1.5 items-center">
-        {[0, 0.15, 0.3].map(delay => (
-          <div
-            key={delay}
-            className="w-2 h-2 rounded-full bg-indigo-400"
-            style={{ animation: `bounce 1.2s ease-in-out ${delay}s infinite` }}
-          />
-        ))}
+      <div className="rounded-2xl rounded-tl-sm px-4 py-3 bg-surface-2 border border-border">
+        <div className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#A99FFF] animate-pulse-soft" />
+          <span className="w-1.5 h-1.5 rounded-full bg-[#A99FFF] animate-pulse-soft" style={{ animationDelay: "0.15s" }} />
+          <span className="w-1.5 h-1.5 rounded-full bg-[#A99FFF] animate-pulse-soft" style={{ animationDelay: "0.3s" }} />
+        </div>
       </div>
     </div>
   );

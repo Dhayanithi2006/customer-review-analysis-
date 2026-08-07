@@ -9,7 +9,7 @@ export function SkeletonDashboard() {
       {/* Metric cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="rounded-2xl border border-white/7 bg-[#0f111a] p-5">
+          <div key={i} className="rounded-2xl border border-border bg-surface p-5">
             <Skeleton className="h-3 w-24 mb-3" />
             <Skeleton className="h-8 w-32 mb-2" />
             <Skeleton className="h-2.5 w-20" />
@@ -30,7 +30,7 @@ export function SkeletonDashboard() {
       {/* Priority items */}
       <div className="flex flex-col gap-3">
         {[...Array(6)].map((_, i) => (
-          <div key={i} className="flex items-center gap-4 px-5 py-4 rounded-xl border border-white/7 bg-[#0f111a]">
+          <div key={i} className="flex items-center gap-4 px-5 py-4 rounded-xl border border-border bg-surface">
             <Skeleton className="h-4 w-6 rounded" />
             <div className="flex-1">
               <Skeleton className="h-4 w-48 mb-2" />

@@ -1,11 +1,24 @@
-export function PageLoader({ label = "Loading…" }: { label?: string }) {
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#08090e] gap-4">
-      <div className="relative">
-        <div className="w-12 h-12 rounded-full border-2 border-white/10 border-t-indigo-500 animate-spin" />
-        <div className="absolute inset-0 rounded-full bg-indigo-500/10 animate-pulse" />
+import { Spinner } from "@/components/ui/spinner";
+import { ContentSkeleton } from "@/components/ui/loading-state";
+
+export function PageLoader({
+  label = "Loading…",
+  skeleton = false,
+}: {
+  label?: string;
+  skeleton?: boolean;
+}) {
+  if (skeleton) {
+    return (
+      <div className="min-h-screen bg-background px-5 sm:px-8 py-10 max-w-5xl mx-auto animate-fade-in">
+        <ContentSkeleton variant="dashboard" />
       </div>
-      <p className="text-sm text-slate-500 animate-pulse">{label}</p>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
+      <Spinner size="lg" label={label} />
     </div>
   );
 }

@@ -20,18 +20,18 @@ export function WeekCard({ week, sessionId, index, isLast }: WeekCardProps) {
       {!isLast && (
         <div
           className="absolute left-[11px] top-10 bottom-[-2rem] w-0.5"
-          style={{ background: "linear-gradient(to bottom, #6366f1, transparent)" }}
+          style={{ background: "linear-gradient(to bottom, #6D5DF6, transparent)" }}
         />
       )}
       {/* Dot */}
-      <div className="absolute left-1 top-6 w-4 h-4 rounded-full bg-indigo-500 border-2 border-[#08090e] shadow-[0_0_8px_rgba(99,102,241,0.6)]" />
+      <div className="absolute left-1 top-6 w-4 h-4 rounded-full bg-primary border-2 border-[#0B1020] shadow-[0_0_0_4px_rgba(109,93,246,0.18)]" />
 
-      <div className="rounded-2xl border border-white/7 bg-[#0f111a] p-5 ml-2 transition-all duration-200 hover:border-white/14 hover:shadow-[0_8px_32px_rgba(0,0,0,0.4)] group">
+      <div className="rounded-[18px] border border-border bg-surface p-5 ml-2 card-elevated hover-lift group">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600 mb-1">Week {week.week}</p>
-            <h3 className="text-base font-bold text-slate-100">{week.theme}</h3>
+            <h3 className="text-base font-bold text-white">{week.theme}</h3>
           </div>
           <EffortBadge effort={week.effort} />
         </div>
@@ -44,7 +44,7 @@ export function WeekCard({ week, sessionId, index, isLast }: WeekCardProps) {
                 key={key}
                 href={`/dashboard/${sessionId}/evidence/${key}`}
                 id={`roadmap-issue-${key}`}
-                className="text-xs px-2.5 py-1 rounded-lg bg-indigo-500/12 border border-indigo-500/25 text-indigo-300 font-mono no-underline hover:bg-indigo-500/20 hover:border-indigo-500/40 transition-all"
+                className="text-xs px-2.5 py-1 rounded-lg bg-primary/12 border border-primary/25 text-primary-soft-2 font-mono no-underline hover:bg-primary/20 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               >
                 {key}
               </Link>
