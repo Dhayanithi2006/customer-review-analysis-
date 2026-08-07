@@ -79,6 +79,7 @@ export default function HomePage() {
             <a href="#decision-example" className="text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors hidden sm:block">Example</a>
             <a href="#sources" className="text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors hidden sm:block">Sources</a>
             <Link href="/history" className="text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors">Past Sessions</Link>
+            <Link href="/register" className="text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors hidden sm:block">Register Business</Link>
             <a href="#analyze" className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors">
               Get Started
             </a>
