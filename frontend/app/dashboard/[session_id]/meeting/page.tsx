@@ -4,18 +4,22 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getDashboard, getSmartQuestions, sendMeetingMessage } from "@/lib/api";
 import type { MeetingMessage, DashboardData } from "@/lib/types";
+import { Navbar } from "@/components/shared/Navbar";
+import { ChatBubble, ThinkingBubble } from "@/components/meeting/ChatBubble";
+import { PageLoader } from "@/components/shared/PageLoader";
+import { Button } from "@/components/ui/button";
 
 export default function MeetingPage() {
   const params    = useParams();
   const sessionId = params.session_id as string;
 
-  const [dashboard, setDashboard]     = useState<DashboardData | null>(null);
-  const [questions, setQuestions]     = useState<string[]>([]);
-  const [messages, setMessages]       = useState<MeetingMessage[]>([]);
-  const [input, setInput]             = useState("");
-  const [loading, setLoading]         = useState(true);
-  const [thinking, setThinking]       = useState(false);
-  const bottomRef                     = useRef<HTMLDivElement>(null);
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [questions, setQuestions] = useState<string[]>([]);
+  const [messages, setMessages]   = useState<MeetingMessage[]>([]);
+  const [input, setInput]         = useState("");
+  const [loading, setLoading]     = useState(true);
+  const [thinking, setThinking]   = useState(false);
+  const bottomRef                 = useRef<HTMLDivElement>(null);
 
   // Load dashboard + smart questions + build opening monologue
   useEffect(() => {
@@ -24,14 +28,13 @@ export default function MeetingPage() {
         setDashboard(dash);
         setQuestions(qs);
 
-        // Build opening monologue from dashboard data
         const topIssues = dash.issues.slice(0, 3);
         const monologue = [
           `Good morning. I've analysed **${dash.total_reviews.toLocaleString()}** customer reviews for your product.`,
           "",
           `**Top 3 priorities:**`,
           ...topIssues.map((issue, i) =>
-            `${i + 1}. **${issue.issue_key.replace(/_/g, " ")}** — ${issue.review_count} reviews${issue.revenue_at_risk > 0 ? `, ₹${(issue.revenue_at_risk/1000).toFixed(0)}K at risk` : ""}`
+            `${i + 1}. **${issue.issue_key.replace(/_/g, " ")}** — ${issue.review_count} reviews${issue.revenue_at_risk > 0 ? `, ₹${(issue.revenue_at_risk / 1000).toFixed(0)}K at risk` : ""}`
           ),
           "",
           `**Your most urgent action:** ${dash.ai_recommendation || "Review the priority list on the dashboard."}`,
@@ -74,151 +77,97 @@ export default function MeetingPage() {
     }
   };
 
-  const renderContent = (text: string) => {
-    // Simple markdown: **bold**, newlines
-    return text.split("\n").map((line, i) => (
-      <p key={i} style={{ margin: line === "" ? "0.5rem 0" : "0" }}>
-        {line.split(/\*\*(.*?)\*\*/g).map((part, j) =>
-          j % 2 === 1 ? <strong key={j}>{part}</strong> : part
-        )}
-      </p>
-    ));
-  };
-
-  if (loading) return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--color-bg)" }}>
-      <span className="spinner" style={{ width: 36, height: 36 }} />
-    </div>
-  );
+  if (loading) return <PageLoader label="Preparing your AI meeting…" />;
 
   return (
-    <main style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "var(--color-bg)" }}>
-      {/* ── Nav ── */}
-      <nav className="nav" style={{ flexShrink: 0 }}>
-        <div className="container" style={{ padding: "1rem 1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.5rem" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-            <Link href={`/dashboard/${sessionId}`} className="btn btn-outline btn-sm" id="btn-back-from-meeting">← Dashboard</Link>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 6px var(--color-success)" }} className="animate-pulse-glow" />
-              <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>AI Product Review Meeting</span>
+    <div className="min-h-screen flex flex-col bg-[#08090e]">
+      <Navbar
+        backHref={`/dashboard/${sessionId}`}
+        backLabel="Dashboard"
+        title="AI Product Review Meeting"
+        actions={
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-xs text-emerald-400 font-semibold hidden sm:block">Live</span>
             </div>
+            {dashboard && (
+              <span className="text-xs text-slate-500 hidden md:block">
+                {dashboard.total_reviews.toLocaleString()} reviews analysed
+              </span>
+            )}
           </div>
-          {dashboard && (
-            <span style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>
-              {dashboard.total_reviews.toLocaleString()} reviews analysed
-            </span>
-          )}
-        </div>
-      </nav>
+        }
+      />
 
-      {/* ── Chat Area ── */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "2rem 0" }}>
-        <div className="container" style={{ maxWidth: 720 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+      {/* ── Chat area ── */}
+      <div className="flex-1 overflow-y-auto py-6">
+        <div className="mx-auto max-w-2xl px-4">
+          <div className="space-y-5">
             {messages.map((msg, i) => (
-              <div key={i} className="animate-fade-in" style={{
-                display: "flex",
-                flexDirection: msg.role === "ai" ? "row" : "row-reverse",
-                alignItems: "flex-start",
-                gap: "0.875rem",
-              }} id={`msg-${i}`}>
-                {/* Avatar */}
-                <div style={{
-                  width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
-                  background: msg.role === "ai" ? "var(--gradient-brand)" : "var(--color-surface-3)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: "1rem",
-                }}>
-                  {msg.role === "ai" ? "🤖" : "👤"}
-                </div>
-
-                {/* Bubble */}
-                <div className={msg.role === "ai" ? "bubble-ai" : "bubble-user"}
-                  style={{ fontSize: "0.9rem", lineHeight: 1.7 }}>
-                  {renderContent(msg.content)}
-                  {msg.referenced_issues && msg.referenced_issues.length > 0 && (
-                    <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
-                      {msg.referenced_issues.map(key => (
-                        <Link
-                          key={key}
-                          href={`/dashboard/${sessionId}/evidence/${key}`}
-                          style={{
-                            fontSize: "0.73rem", padding: "0.2rem 0.5rem",
-                            background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)",
-                            borderRadius: 4, color: "var(--color-primary-glow)",
-                            textDecoration: "none", fontFamily: "JetBrains Mono, monospace",
-                          }}
-                        >
-                          {key}
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+              <ChatBubble key={i} message={msg} sessionId={sessionId} index={i} />
             ))}
 
-            {/* Thinking indicator */}
-            {thinking && (
-              <div style={{ display: "flex", alignItems: "flex-start", gap: "0.875rem" }}>
-                <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--gradient-brand)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem" }}>🤖</div>
-                <div className="bubble-ai" style={{ display: "flex", gap: "4px", alignItems: "center", padding: "1rem 1.25rem" }}>
-                  {[0, 0.2, 0.4].map(delay => (
-                    <div key={delay} style={{
-                      width: 8, height: 8, borderRadius: "50%", background: "var(--color-primary-glow)",
-                      animation: "pulse-glow 1.4s ease-in-out infinite",
-                      animationDelay: `${delay}s`,
-                    }} />
-                  ))}
-                </div>
-              </div>
-            )}
+            {thinking && <ThinkingBubble />}
             <div ref={bottomRef} />
           </div>
         </div>
       </div>
 
-      {/* ── Smart Questions + Input ── */}
-      <div style={{ flexShrink: 0, borderTop: "1px solid var(--color-border)", background: "rgba(8,9,14,0.9)", backdropFilter: "blur(20px)", padding: "1rem 0" }}>
-        <div className="container" style={{ maxWidth: 720 }}>
-          {/* Question chips */}
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.875rem", overflowX: "auto" }}>
-            {questions.map((q, i) => (
-              <button
-                key={i}
-                className="question-chip"
-                onClick={() => sendMessage(q)}
-                disabled={thinking}
-                id={`chip-${i}`}
-              >
-                {q}
-              </button>
-            ))}
-          </div>
+      {/* ── Input area ── */}
+      <div className="shrink-0 border-t border-white/7 bg-[#08090e]/90 backdrop-blur-xl">
+        <div className="mx-auto max-w-2xl px-4 py-4">
+          {/* Smart question chips */}
+          {questions.length > 0 && (
+            <div className="flex gap-2 flex-wrap mb-3">
+              {questions.map((q, i) => (
+                <button
+                  key={i}
+                  id={`chip-${i}`}
+                  onClick={() => sendMessage(q)}
+                  disabled={thinking}
+                  className="text-xs px-3 py-1.5 rounded-full border border-white/10 bg-[#161827] text-slate-400 hover:border-indigo-500/40 hover:text-slate-200 hover:bg-indigo-500/8 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Input row */}
-          <div style={{ display: "flex", gap: "0.75rem" }}>
+          <div className="flex gap-2">
             <input
-              className="input"
+              id="meeting-input"
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendMessage(input)}
               placeholder="Ask anything about your product data…"
               disabled={thinking}
-              id="meeting-input"
+              className="flex-1 bg-[#161827] border border-white/10 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/25 transition-all disabled:opacity-50"
             />
-            <button
-              className="btn btn-primary"
+            <Button
+              id="btn-send-message"
               onClick={() => sendMessage(input)}
               disabled={thinking || !input.trim()}
-              id="btn-send-message"
-              style={{ flexShrink: 0, opacity: thinking || !input.trim() ? 0.5 : 1 }}
+              className="shrink-0"
             >
-              {thinking ? <span className="spinner" style={{ width: 16, height: 16 }} /> : "Send"}
-            </button>
+              {thinking ? (
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : "Send"}
+            </Button>
+          </div>
+
+          <div className="flex items-center justify-between mt-2">
+            <p className="text-[11px] text-slate-600">Press Enter to send · Shift+Enter for new line</p>
+            <Link
+              href={`/dashboard/${sessionId}`}
+              className="text-[11px] text-slate-600 hover:text-slate-400 transition-colors no-underline"
+            >
+              ← Back to dashboard
+            </Link>
           </div>
         </div>
       </div>
-    </main>
+    </div>
   );
 }

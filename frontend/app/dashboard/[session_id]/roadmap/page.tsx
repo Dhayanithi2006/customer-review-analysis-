@@ -2,14 +2,34 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getRoadmap } from "@/lib/api";
-import { exportUrls } from "@/lib/api";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { getRoadmap, exportUrls } from "@/lib/api";
 import type { RoadmapWeek } from "@/lib/types";
+import { Navbar } from "@/components/shared/Navbar";
+import { WeekCard } from "@/components/roadmap/WeekCard";
+import { SkeletonRoadmap } from "@/components/roadmap/SkeletonRoadmap";
+import { ErrorState } from "@/components/shared/ErrorState";
+import { Button } from "@/components/ui/button";
 
-const EFFORT_COLORS: Record<string, string> = {
-  "Quick Win": "var(--color-success)",
-  "Medium":    "var(--color-warning)",
+const EFFORT_COLOR: Record<string, string> = {
+  "Quick Win": "#10b981",
+  "Medium":    "#f59e0b",
   "Large":     "#ef4444",
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const CustomTooltip = ({ active, payload }: any) => {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload;
+  return (
+    <div className="rounded-xl border border-white/10 bg-[#161827] px-3 py-2 text-xs shadow-xl">
+      <p className="font-bold text-slate-200 mb-0.5">Week {d.week}</p>
+      <p className="text-slate-400">{d.theme}</p>
+      <p className="font-semibold mt-1" style={{ color: EFFORT_COLOR[d.effort] || "#818cf8" }}>
+        {d.effort} · {d.count} issues
+      </p>
+    </div>
+  );
 };
 
 export default function RoadmapPage() {
@@ -18,122 +38,121 @@ export default function RoadmapPage() {
 
   const [roadmap, setRoadmap] = useState<RoadmapWeek[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true);
     getRoadmap(sessionId)
       .then(r => setRoadmap(r.roadmap))
+      .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [sessionId]);
+  };
 
-  if (loading) return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--color-bg)" }}>
-      <span className="spinner" style={{ width: 36, height: 36 }} />
-    </div>
-  );
+  useEffect(() => { load(); }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (error) return <ErrorState message={error} onRetry={load} />;
+
+  const chartData = roadmap.map(w => ({
+    week: w.week,
+    theme: w.theme.length > 20 ? w.theme.slice(0, 18) + "…" : w.theme,
+    count: w.issues.length,
+    effort: w.effort,
+  }));
 
   return (
-    <main style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
-      <nav className="nav">
-        <div className="container" style={{ padding: "1rem 1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.5rem" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-            <Link href={`/dashboard/${sessionId}`} className="btn btn-outline btn-sm" id="btn-back-from-roadmap">← Dashboard</Link>
-            <span style={{ fontWeight: 700 }}>🗺️ Product Roadmap</span>
+    <div className="min-h-screen bg-[#08090e]">
+      <Navbar
+        backHref={`/dashboard/${sessionId}`}
+        backLabel="Dashboard"
+        title="Product Roadmap"
+        sessionId={sessionId}
+        actions={
+          <div className="flex gap-2">
+            <Button asChild variant="outline" size="sm">
+              <a href={exportUrls.roadmap(sessionId)} download id="btn-export-roadmap">
+                ⬇️ Export MD
+              </a>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/dashboard/${sessionId}/sprint`}>⚡ Sprint →</Link>
+            </Button>
           </div>
-          <a
-            href={exportUrls.roadmap(sessionId)}
-            download
-            className="btn btn-outline btn-sm"
-            id="btn-export-roadmap"
-          >
-            ⬇️ Export Markdown
-          </a>
-        </div>
-      </nav>
+        }
+      />
 
-      <div className="container" style={{ paddingTop: "2rem", paddingBottom: "4rem", maxWidth: 760 }}>
-        <div style={{ marginBottom: "2rem" }}>
-          <h1 style={{ marginBottom: "0.5rem" }}>6-Week Product Roadmap</h1>
-          <p style={{ color: "var(--color-text-secondary)" }}>
+      <div className="mx-auto max-w-screen-md px-6 py-8">
+        {/* Header */}
+        <div className="mb-8 animate-fade-in">
+          <h1 className="text-3xl font-black text-slate-100 mb-2">6-Week Product Roadmap</h1>
+          <p className="text-slate-400">
             Evidence-backed plan generated from your customer reviews. Every theme links to real feedback.
           </p>
         </div>
 
-        {/* Timeline */}
-        <div style={{ position: "relative" }}>
-          {roadmap.map((week, i) => (
-            <div
-              key={i}
-              className="roadmap-week animate-fade-in"
-              id={`roadmap-week-${week.week}`}
-              style={{
-                marginBottom: i === roadmap.length - 1 ? 0 : "2rem",
-                animationDelay: `${i * 0.08}s`,
-              }}
-            >
-              <div className="roadmap-dot" />
+        {loading ? (
+          <SkeletonRoadmap />
+        ) : (
+          <>
+            {/* ── Effort Chart ── */}
+            {roadmap.length > 0 && (
+              <div className="rounded-2xl border border-white/7 bg-[#0f111a] p-5 mb-8 animate-fade-in">
+                <h3 className="text-sm font-bold text-slate-300 mb-4">Issues per Week</h3>
+                <ResponsiveContainer width="100%" height={120}>
+                  <BarChart data={chartData} barSize={32}>
+                    <XAxis
+                      dataKey="week"
+                      tickFormatter={v => `W${v}`}
+                      tick={{ fill: "#475569", fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis hide />
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
+                    <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                      {chartData.map((entry, i) => (
+                        <Cell key={i} fill={EFFORT_COLOR[entry.effort] || "#6366f1"} fillOpacity={0.8} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
 
-              <div className="card" style={{ marginLeft: "0.5rem" }}>
-                {/* Header */}
-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "0.875rem", flexWrap: "wrap", gap: "0.5rem" }}>
-                  <div>
-                    <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.25rem" }}>
-                      Week {week.week}
+                {/* Legend */}
+                <div className="flex gap-4 mt-3 flex-wrap">
+                  {Object.entries(EFFORT_COLOR).map(([label, color]) => (
+                    <div key={label} className="flex items-center gap-1.5 text-xs text-slate-500">
+                      <div className="w-2.5 h-2.5 rounded-sm" style={{ background: color }} />
+                      {label}
                     </div>
-                    <h3 style={{ fontSize: "1.1rem" }}>{week.theme}</h3>
-                  </div>
-                  <span style={{
-                    padding: "0.3rem 0.75rem", borderRadius: 999,
-                    fontSize: "0.75rem", fontWeight: 700,
-                    background: `${EFFORT_COLORS[week.effort] || "var(--color-accent)"}20`,
-                    color: EFFORT_COLORS[week.effort] || "var(--color-accent)",
-                    border: `1px solid ${EFFORT_COLORS[week.effort] || "var(--color-accent)"}40`,
-                    whiteSpace: "nowrap",
-                  }}>
-                    ⏱ {week.effort}
-                  </span>
+                  ))}
                 </div>
-
-                {/* Issues */}
-                {week.issues.length > 0 && (
-                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
-                    {week.issues.map(key => (
-                      <Link
-                        key={key}
-                        href={`/dashboard/${sessionId}/evidence/${key}`}
-                        style={{
-                          fontSize: "0.78rem", padding: "0.25rem 0.625rem",
-                          background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.25)",
-                          borderRadius: 6, color: "var(--color-primary-glow)",
-                          textDecoration: "none", fontFamily: "JetBrains Mono, monospace",
-                          transition: "all 0.15s",
-                        }}
-                        id={`roadmap-issue-${key}`}
-                      >
-                        {key}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-
-                {/* Rationale */}
-                <p style={{ fontSize: "0.85rem", color: "var(--color-text-muted)", fontStyle: "italic" }}>
-                  {week.rationale}
-                </p>
               </div>
-            </div>
-          ))}
-        </div>
+            )}
 
-        {/* CTA */}
-        <div style={{ display: "flex", gap: "1rem", marginTop: "3rem", flexWrap: "wrap" }}>
-          <Link href={`/dashboard/${sessionId}/sprint`} className="btn btn-primary" id="btn-to-sprint">
-            ⚡ View Sprint Plan →
-          </Link>
-          <Link href={`/dashboard/${sessionId}/meeting`} className="btn btn-outline" id="btn-to-meeting">
-            🎤 Discuss with AI
-          </Link>
-        </div>
+            {/* ── Timeline ── */}
+            <div className="relative">
+              {roadmap.map((week, i) => (
+                <WeekCard
+                  key={i}
+                  week={week}
+                  sessionId={sessionId}
+                  index={i}
+                  isLast={i === roadmap.length - 1}
+                />
+              ))}
+            </div>
+
+            {/* ── CTA ── */}
+            <div className="flex gap-3 mt-10 flex-wrap">
+              <Button asChild id="btn-to-sprint">
+                <Link href={`/dashboard/${sessionId}/sprint`}>⚡ View Sprint Plan →</Link>
+              </Button>
+              <Button asChild variant="outline" id="btn-to-meeting">
+                <Link href={`/dashboard/${sessionId}/meeting`}>🎤 Discuss with AI</Link>
+              </Button>
+            </div>
+          </>
+        )}
       </div>
-    </main>
+    </div>
   );
 }

@@ -2,13 +2,14 @@
 import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { uploadCSV } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 
 const SOURCES = [
-  { id: "play_store",  label: "Play Store",  emoji: "🤖" },
-  { id: "app_store",   label: "App Store",   emoji: "🍎" },
-  { id: "support",     label: "Support",     emoji: "🎧" },
-  { id: "twitter",     label: "Twitter/X",   emoji: "𝕏"  },
-  { id: "reddit",      label: "Reddit",      emoji: "👾" },
+  { id: "play_store", label: "Play Store",  emoji: "🤖" },
+  { id: "app_store",  label: "App Store",   emoji: "🍎" },
+  { id: "support",    label: "Support",     emoji: "🎧" },
+  { id: "twitter",    label: "Twitter/X",   emoji: "𝕏"  },
+  { id: "reddit",     label: "Reddit",      emoji: "👾" },
 ];
 
 const TEAM_SIZES = [
@@ -17,22 +18,29 @@ const TEAM_SIZES = [
   { id: "5_10_plus", label: "5–10+"       },
 ];
 
+const PIPELINE_STEPS = [
+  { icon: "📥", label: "Upload CSV",       desc: "Any format. Auto-detected." },
+  { icon: "🧹", label: "Clean & Filter",   desc: "Spam, dupes removed." },
+  { icon: "💬", label: "VADER Sentiment",  desc: "Routes actionable reviews." },
+  { icon: "🤖", label: "Gemini AI",        desc: "Categorises & clusters." },
+  { icon: "📊", label: "Priority Engine",  desc: "Scores every issue." },
+  { icon: "🗺️", label: "Roadmap + Sprint", desc: "6 weeks. Jira-ready." },
+  { icon: "🎤", label: "AI Meeting",       desc: "Ask anything. Get answers." },
+];
+
 export default function HomePage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [file, setFile]           = useState<File | null>(null);
-  const [source, setSource]       = useState("play_store");
-  const [teamSize, setTeamSize]   = useState("2_5");
-  const [dragOver, setDragOver]   = useState(false);
+  const [file, setFile]         = useState<File | null>(null);
+  const [source, setSource]     = useState("play_store");
+  const [teamSize, setTeamSize] = useState("2_5");
+  const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [error, setError]         = useState<string | null>(null);
+  const [error, setError]       = useState<string | null>(null);
 
   const handleFile = (f: File) => {
-    if (!f.name.endsWith(".csv")) {
-      setError("Please upload a .csv file.");
-      return;
-    }
+    if (!f.name.endsWith(".csv")) { setError("Please upload a .csv file."); return; }
     setFile(f);
     setError(null);
   };
@@ -42,6 +50,7 @@ export default function HomePage() {
     setDragOver(false);
     const f = e.dataTransfer.files[0];
     if (f) handleFile(f);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSubmit = async () => {
@@ -58,64 +67,88 @@ export default function HomePage() {
   };
 
   return (
-    <main style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
-      {/* ── Nav ── */}
-      <nav className="nav">
-        <div className="container" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.5rem" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: 8,
-              background: "var(--gradient-brand)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: "1rem"
-            }}>🗺️</div>
-            <span style={{ fontWeight: 800, fontSize: "1.1rem", letterSpacing: "-0.02em" }}>RoadmapAI</span>
+    <div className="min-h-screen bg-[#08090e] text-slate-100 overflow-x-hidden">
+      {/* Ambient background glows */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-[-20%] left-[20%] w-[600px] h-[600px] bg-indigo-500/8 rounded-full blur-[120px] animate-glow" />
+        <div className="absolute top-[10%] right-[10%] w-[400px] h-[400px] bg-cyan-500/6 rounded-full blur-[100px] animate-glow" style={{ animationDelay: "1s" }} />
+        <div className="absolute bottom-[20%] left-[30%] w-[500px] h-[500px] bg-purple-500/5 rounded-full blur-[130px] animate-glow" style={{ animationDelay: "2s" }} />
+      </div>
+
+      {/* ── Navbar ── */}
+      <nav className="sticky top-0 z-50 border-b border-white/7 bg-[#08090e]/85 backdrop-blur-xl">
+        <div className="mx-auto max-w-screen-xl px-6 flex items-center justify-between h-14">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center text-sm shadow-[0_0_16px_rgba(99,102,241,0.5)]">
+              🗺️
+            </div>
+            <span className="font-black text-base tracking-tight">RoadmapAI</span>
           </div>
-          <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
-            From Customer Voice to Product Decisions
-          </span>
+          <span className="text-xs text-slate-500 font-mono hidden sm:block">From Customer Voice to Product Decisions</span>
         </div>
       </nav>
 
-      <div className="container" style={{ paddingTop: "4rem", paddingBottom: "6rem" }}>
+      <div className="mx-auto max-w-screen-xl px-6">
         {/* ── Hero ── */}
-        <div style={{ textAlign: "center", marginBottom: "4rem" }} className="animate-fade-in">
-          <div style={{
-            display: "inline-flex", alignItems: "center", gap: "0.5rem",
-            background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.25)",
-            borderRadius: 999, padding: "0.375rem 1rem",
-            fontSize: "0.8rem", color: "var(--color-primary-glow)",
-            fontWeight: 600, marginBottom: "1.5rem",
-          }}>
-            <span>✨</span> AI Product Intelligence Platform
+        <div className="text-center pt-20 pb-16 animate-fade-in-up">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-xs font-semibold text-indigo-300 mb-6">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            ✨ AI Product Intelligence Platform
           </div>
-          <h1 style={{ marginBottom: "1rem" }}>
-            Turn <span className="text-gradient">2,000 reviews</span> into<br />
-            a sprint plan in 3 minutes
+
+          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight leading-[1.05] mb-6">
+            Turn{" "}
+            <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent animate-gradient">
+              2,000 reviews
+            </span>
+            <br />
+            into a sprint plan
+            <br className="hidden sm:block" /> in 3 minutes
           </h1>
-          <p style={{ fontSize: "1.15rem", color: "var(--color-text-secondary)", maxWidth: 520, margin: "0 auto 2rem" }}>
-            Upload your customer feedback. RoadmapAI tells you exactly what to build next — with evidence, priority scores, and Jira-ready stories.
+
+          <p className="text-lg text-slate-400 max-w-xl mx-auto mb-10 leading-relaxed">
+            Upload your customer feedback. RoadmapAI tells you exactly what to build next —
+            with evidence, priority scores, and Jira-ready stories.
           </p>
+
+          {/* Trust signals */}
+          <div className="flex items-center justify-center gap-6 flex-wrap mb-16">
+            {[
+              { icon: "🔒", text: "Reviews never stored raw" },
+              { icon: "⚡", text: "Results in ~3 minutes" },
+              { icon: "📋", text: "Jira-ready sprint" },
+              { icon: "🎯", text: "Evidence-backed decisions" },
+            ].map(t => (
+              <div key={t.text} className="flex items-center gap-2 text-sm text-slate-500">
+                <span>{t.icon}</span>
+                <span>{t.text}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* ── Upload Card ── */}
-        <div style={{ maxWidth: 640, margin: "0 auto" }}>
-          <div className="card" style={{ padding: "2rem" }}>
+        <div className="max-w-2xl mx-auto pb-20 animate-fade-in-up" style={{ animationDelay: "0.15s" }}>
+          <div className="rounded-2xl border border-white/10 bg-[#0f111a] shadow-[0_0_80px_rgba(99,102,241,0.08)] p-8">
             {/* Step 1: Source */}
-            <div style={{ marginBottom: "1.75rem" }}>
-              <p style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.75rem" }}>
+            <div className="mb-7">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-3">
                 Step 1 — Review Source
               </p>
-              <div style={{ display: "flex", gap: "0.625rem", flexWrap: "wrap" }}>
+              <div className="flex gap-2 flex-wrap">
                 {SOURCES.map(s => (
                   <button
                     key={s.id}
-                    className={`source-btn ${source === s.id ? "selected" : ""}`}
-                    onClick={() => setSource(s.id)}
                     id={`source-${s.id}`}
+                    onClick={() => setSource(s.id)}
+                    className={`flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all duration-150 min-w-[76px] ${
+                      source === s.id
+                        ? "border-indigo-500 bg-indigo-500/12 shadow-[0_0_0_1px_rgba(99,102,241,0.2)]"
+                        : "border-white/7 bg-[#161827] hover:border-white/15"
+                    }`}
                   >
-                    <span style={{ fontSize: "1.5rem" }}>{s.emoji}</span>
-                    <span style={{ fontSize: "0.75rem", fontWeight: 600, color: source === s.id ? "var(--color-text-primary)" : "var(--color-text-secondary)" }}>
+                    <span className="text-2xl">{s.emoji}</span>
+                    <span className={`text-[11px] font-semibold ${source === s.id ? "text-slate-100" : "text-slate-400"}`}>
                       {s.label}
                     </span>
                   </button>
@@ -124,25 +157,21 @@ export default function HomePage() {
             </div>
 
             {/* Step 2: Team Size */}
-            <div style={{ marginBottom: "1.75rem" }}>
-              <p style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.75rem" }}>
+            <div className="mb-7">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-3">
                 Step 2 — Team Size
               </p>
-              <div style={{ display: "flex", gap: "0.625rem" }}>
+              <div className="flex gap-2">
                 {TEAM_SIZES.map(t => (
                   <button
                     key={t.id}
-                    onClick={() => setTeamSize(t.id)}
                     id={`team-${t.id}`}
-                    style={{
-                      flex: 1, padding: "0.625rem",
-                      background: teamSize === t.id ? "rgba(99,102,241,0.15)" : "var(--color-surface-2)",
-                      border: `2px solid ${teamSize === t.id ? "var(--color-primary)" : "var(--color-border)"}`,
-                      borderRadius: "var(--radius-md)", cursor: "pointer",
-                      fontSize: "0.82rem", fontWeight: 600,
-                      color: teamSize === t.id ? "var(--color-text-primary)" : "var(--color-text-secondary)",
-                      transition: "all var(--transition-fast)",
-                    }}
+                    onClick={() => setTeamSize(t.id)}
+                    className={`flex-1 py-2.5 px-3 rounded-xl border-2 cursor-pointer text-sm font-semibold transition-all duration-150 ${
+                      teamSize === t.id
+                        ? "border-indigo-500 bg-indigo-500/12 text-slate-100"
+                        : "border-white/7 bg-[#161827] text-slate-400 hover:border-white/15"
+                    }`}
                   >
                     {t.label}
                   </button>
@@ -151,114 +180,146 @@ export default function HomePage() {
             </div>
 
             {/* Step 3: File Upload */}
-            <div style={{ marginBottom: "1.75rem" }}>
-              <p style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.75rem" }}>
+            <div className="mb-6">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-3">
                 Step 3 — Upload CSV
               </p>
+
               <div
-                className={`upload-zone ${dragOver ? "drag-over" : ""}`}
+                id="upload-dropzone"
+                className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-200 ${
+                  dragOver
+                    ? "border-indigo-500 bg-indigo-500/8 shadow-[0_0_40px_rgba(99,102,241,0.15)]"
+                    : file
+                    ? "border-emerald-500/50 bg-emerald-500/5"
+                    : "border-white/10 bg-[#0f111a] hover:border-indigo-500/40 hover:bg-indigo-500/5"
+                }`}
                 onClick={() => fileInputRef.current?.click()}
                 onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
                 onDrop={handleDrop}
-                id="upload-dropzone"
               >
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept=".csv"
-                  style={{ display: "none" }}
+                  className="hidden"
                   onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
                 />
                 {file ? (
                   <div>
-                    <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>✅</div>
-                    <p style={{ fontWeight: 700, marginBottom: "0.25rem" }}>{file.name}</p>
-                    <p style={{ fontSize: "0.85rem", color: "var(--color-text-muted)" }}>
-                      {(file.size / 1024).toFixed(0)} KB · Click to change
-                    </p>
+                    <div className="text-4xl mb-3">✅</div>
+                    <p className="font-bold text-slate-100 mb-1">{file.name}</p>
+                    <p className="text-sm text-slate-500">{(file.size / 1024).toFixed(0)} KB · Click to change</p>
                   </div>
                 ) : (
                   <div>
-                    <div style={{ fontSize: "2.5rem", marginBottom: "0.75rem" }}>📂</div>
-                    <p style={{ fontWeight: 600, marginBottom: "0.25rem" }}>Drop your CSV here</p>
-                    <p style={{ fontSize: "0.85rem", color: "var(--color-text-muted)" }}>
-                      or click to browse · max 50 MB · up to 10,000 reviews
-                    </p>
+                    <div className="text-5xl mb-4 animate-float">📂</div>
+                    <p className="font-semibold text-slate-200 mb-1">Drop your CSV here</p>
+                    <p className="text-sm text-slate-500">or click to browse · max 50 MB · up to 10,000 reviews</p>
                   </div>
                 )}
               </div>
 
-              {/* Format hint */}
-              <p style={{ fontSize: "0.78rem", color: "var(--color-text-muted)", marginTop: "0.75rem", textAlign: "center" }}>
+              <p className="text-xs text-slate-600 mt-3 text-center">
                 💡 Any CSV with a review/text column works. Column names are auto-detected.
               </p>
             </div>
 
             {/* Error */}
             {error && (
-              <div style={{
-                background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)",
-                borderRadius: "var(--radius-md)", padding: "0.75rem 1rem",
-                color: "#f87171", fontSize: "0.875rem", marginBottom: "1rem",
-              }}>
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-sm mb-4">
                 ⚠️ {error}
               </div>
             )}
 
             {/* Submit */}
-            <button
-              className="btn btn-primary btn-lg"
+            <Button
+              id="btn-analyze"
               onClick={handleSubmit}
               disabled={uploading || !file}
-              id="btn-analyze"
-              style={{
-                width: "100%", justifyContent: "center",
-                opacity: uploading || !file ? 0.6 : 1,
-                cursor: uploading || !file ? "not-allowed" : "pointer",
-              }}
+              size="lg"
+              className="w-full justify-center"
             >
               {uploading ? (
-                <><span className="spinner" style={{ width: 18, height: 18 }} /> Uploading…</>
+                <>
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Uploading…
+                </>
               ) : (
                 <>🚀 Analyse My Reviews</>
               )}
-            </button>
-          </div>
-
-          {/* ── Trust signals ── */}
-          <div style={{ display: "flex", justifyContent: "center", gap: "2rem", marginTop: "2rem", flexWrap: "wrap" }}>
-            {["🔒 Reviews never stored raw", "⚡ Results in ~3 minutes", "📋 Jira-ready sprint"].map(t => (
-              <span key={t} style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                {t}
-              </span>
-            ))}
+            </Button>
           </div>
         </div>
 
         {/* ── How it works ── */}
-        <div style={{ marginTop: "6rem", textAlign: "center" }}>
-          <h2 style={{ marginBottom: "0.5rem" }}>How it works</h2>
-          <p style={{ color: "var(--color-text-secondary)", marginBottom: "3rem" }}>7 steps. 3 minutes. Zero data science.</p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem" }}>
+        <div className="pb-24">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold mb-3">How it works</h2>
+            <p className="text-slate-400">7 steps. 3 minutes. Zero data science.</p>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4">
+            {PIPELINE_STEPS.map((step, i) => (
+              <div
+                key={i}
+                className="group rounded-2xl border border-white/7 bg-[#0f111a] p-4 text-center transition-all duration-200 hover:border-indigo-500/30 hover:-translate-y-1 hover:shadow-[0_8px_32px_rgba(99,102,241,0.1)] animate-fade-in"
+                style={{ animationDelay: `${i * 0.06}s` }}
+              >
+                <div className="text-3xl mb-2 transition-transform duration-200 group-hover:scale-110">{step.icon}</div>
+                <div className="font-bold text-xs text-slate-200 mb-1">{step.label}</div>
+                <div className="text-[11px] text-slate-500">{step.desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Feature highlights ── */}
+        <div className="pb-24 border-t border-white/7 pt-20">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold mb-3">Built for product teams that move fast</h2>
+            <p className="text-slate-400">Everything you need to go from raw reviews to shipped features.</p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6">
             {[
-              { icon: "📥", label: "Upload CSV",         desc: "Any format. Auto-detected." },
-              { icon: "🧹", label: "Clean & Filter",     desc: "Spam, dupes removed." },
-              { icon: "💬", label: "VADER Sentiment",    desc: "Routes actionable reviews." },
-              { icon: "🤖", label: "Gemini AI",          desc: "Categorises & clusters." },
-              { icon: "📊", label: "Priority Engine",    desc: "Scores every issue." },
-              { icon: "🗺️", label: "Roadmap + Sprint",   desc: "6 weeks. Jira-ready." },
-              { icon: "🎤", label: "AI Meeting",         desc: "Ask anything. Get answers." },
-            ].map((step, i) => (
-              <div key={i} className="card" style={{ textAlign: "center", padding: "1.25rem" }}>
-                <div style={{ fontSize: "1.75rem", marginBottom: "0.5rem" }}>{step.icon}</div>
-                <div style={{ fontWeight: 700, fontSize: "0.9rem", marginBottom: "0.25rem" }}>{step.label}</div>
-                <div style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>{step.desc}</div>
+              {
+                icon: "🧠",
+                title: "AI-Powered Clustering",
+                desc: "Gemini groups thousands of reviews into actionable issue clusters — automatically.",
+                gradient: "from-indigo-500/20 to-purple-500/10",
+              },
+              {
+                icon: "📊",
+                title: "Revenue Impact Scoring",
+                desc: "Every issue is weighted by premium user count, severity, and review volume.",
+                gradient: "from-cyan-500/20 to-indigo-500/10",
+              },
+              {
+                icon: "⚡",
+                title: "Jira-Ready Sprint Plans",
+                desc: "User stories, acceptance criteria, and story points — ready to import.",
+                gradient: "from-amber-500/15 to-orange-500/10",
+              },
+            ].map((f, i) => (
+              <div
+                key={i}
+                className={`rounded-2xl border border-white/7 bg-gradient-to-br ${f.gradient} p-6 transition-all duration-200 hover:border-white/15 hover:-translate-y-1`}
+              >
+                <div className="text-3xl mb-4">{f.icon}</div>
+                <h3 className="font-bold text-slate-100 mb-2">{f.title}</h3>
+                <p className="text-sm text-slate-400 leading-relaxed">{f.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </div>
-    </main>
+
+      {/* Footer */}
+      <div className="border-t border-white/7 py-8 text-center text-xs text-slate-600">
+        RoadmapAI · AI Product Intelligence Platform · Built for Hacklab
+      </div>
+    </div>
   );
 }

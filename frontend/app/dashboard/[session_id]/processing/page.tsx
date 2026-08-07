@@ -2,24 +2,26 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getPipelineStatus } from "@/lib/api";
+import { Progress } from "@/components/ui/progress";
 
 const STEPS = [
-  { step: 1, label: "Removing duplicates & spam",          icon: "🧹" },
-  { step: 2, label: "Running sentiment analysis (VADER)",   icon: "💬" },
-  { step: 3, label: "AI categorisation (Gemini)",           icon: "🤖" },
-  { step: 4, label: "Clustering related issues",            icon: "🔗" },
-  { step: 5, label: "Calculating priority scores",          icon: "📊" },
-  { step: 6, label: "Generating executive summary",         icon: "📝" },
-  { step: 7, label: "Building roadmap & sprint plan",       icon: "🗺️" },
+  { step: 1, label: "Removing duplicates & spam",          icon: "🧹", desc: "Cleaning raw review data" },
+  { step: 2, label: "Running sentiment analysis (VADER)",  icon: "💬", desc: "Scoring each review" },
+  { step: 3, label: "AI categorisation (Gemini)",          icon: "🤖", desc: "Classifying issues with AI" },
+  { step: 4, label: "Clustering related issues",           icon: "🔗", desc: "Grouping similar feedback" },
+  { step: 5, label: "Calculating priority scores",         icon: "📊", desc: "Ranking by impact" },
+  { step: 6, label: "Generating executive summary",        icon: "📝", desc: "Writing your brief" },
+  { step: 7, label: "Building roadmap & sprint plan",      icon: "🗺️", desc: "Finalising deliverables" },
 ];
 
 export default function ProcessingPage() {
-  const params = useParams();
-  const router = useRouter();
+  const params    = useParams();
+  const router    = useRouter();
   const sessionId = params.session_id as string;
 
   const [status, setStatus] = useState({ step: 0, progress: 5, processed: 0, total: 0, message: "" });
   const [failed, setFailed] = useState(false);
+  const [done, setDone]     = useState(false);
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -28,7 +30,8 @@ export default function ProcessingPage() {
         setStatus(s);
         if (s.status === "complete") {
           clearInterval(interval);
-          setTimeout(() => router.push(`/dashboard/${sessionId}`), 800);
+          setDone(true);
+          setTimeout(() => router.push(`/dashboard/${sessionId}`), 1200);
         }
         if (s.status === "failed") {
           clearInterval(interval);
@@ -40,87 +43,109 @@ export default function ProcessingPage() {
   }, [sessionId, router]);
 
   return (
-    <main style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--color-bg)" }}>
-      <div style={{ maxWidth: 560, width: "100%", padding: "2rem" }} className="animate-fade-in">
-        <div className="card" style={{ padding: "2.5rem" }}>
+    <div className="min-h-screen bg-[#08090e] flex items-center justify-center px-4 relative overflow-hidden">
+      {/* Ambient glows */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-indigo-500/6 rounded-full blur-[120px] animate-glow" />
+      </div>
+
+      <div className="relative w-full max-w-lg animate-fade-in-up">
+        <div className="rounded-2xl border border-white/10 bg-[#0f111a] shadow-[0_0_80px_rgba(0,0,0,0.6)] p-8">
+
           {/* Header */}
-          <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-            <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>
-              {failed ? "❌" : status.step >= 7 ? "✅" : "⚙️"}
+          <div className="text-center mb-8">
+            <div className="text-5xl mb-4">
+              {failed ? "❌" : done ? "✅" : (
+                <div className="relative inline-flex">
+                  <div className="w-16 h-16 rounded-full border-4 border-indigo-500/20 border-t-indigo-500 animate-spin mx-auto" />
+                  <div className="absolute inset-0 flex items-center justify-center text-2xl">⚙️</div>
+                </div>
+              )}
             </div>
-            <h2 style={{ marginBottom: "0.5rem" }}>
-              {failed ? "Analysis failed" : status.step >= 7 ? "Analysis complete!" : "Analysing your reviews…"}
+            <h2 className="text-2xl font-black mb-2">
+              {failed ? "Analysis failed" : done ? "Analysis complete!" : "Analysing your reviews…"}
             </h2>
-            <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem" }}>
+            <p className="text-slate-400 text-sm">
               {failed
-                ? status.message || "An error occurred. Please try again."
-                : `${status.processed.toLocaleString()} of ${status.total.toLocaleString()} reviews processed`}
+                ? (status.message || "An error occurred. Please try again.")
+                : done
+                ? "Redirecting to your dashboard…"
+                : status.total > 0
+                ? `${status.processed.toLocaleString()} of ${status.total.toLocaleString()} reviews processed`
+                : "Getting started…"}
             </p>
           </div>
 
           {/* Progress bar */}
           {!failed && (
-            <div style={{ marginBottom: "2rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem" }}>
-                <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>Progress</span>
-                <span style={{ fontSize: "0.8rem", fontWeight: 700, fontFamily: "JetBrains Mono, monospace", color: "var(--color-primary-glow)" }}>
-                  {status.progress}%
-                </span>
+            <div className="mb-8">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs text-slate-500 font-medium">Progress</span>
+                <span className="text-xs font-black font-mono text-indigo-400">{status.progress}%</span>
               </div>
-              <div className="progress-bar">
-                <div className="progress-fill" style={{ width: `${status.progress}%` }} />
-              </div>
+              <Progress value={status.progress} />
             </div>
           )}
 
           {/* Step list */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+          <div className="space-y-2">
             {STEPS.map(s => {
               const done    = s.step < status.step;
               const current = s.step === status.step;
+              const future  = s.step > status.step;
+
               return (
-                <div key={s.step} style={{
-                  display: "flex", alignItems: "center", gap: "0.875rem",
-                  padding: "0.75rem 1rem",
-                  background: current ? "rgba(99,102,241,0.08)" : "transparent",
-                  border: `1px solid ${current ? "rgba(99,102,241,0.25)" : "transparent"}`,
-                  borderRadius: "var(--radius-md)",
-                  opacity: s.step > status.step ? 0.35 : 1,
-                  transition: "all 0.3s ease",
-                }}>
-                  <div style={{ fontSize: "1.1rem", width: 24, textAlign: "center" }}>
-                    {done ? "✅" : current ? <span style={{ fontSize: "1rem" }}>{s.icon}</span> : s.icon}
+                <div
+                  key={s.step}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-300 ${
+                    current
+                      ? "bg-indigo-500/8 border-indigo-500/25 shadow-[0_0_0_1px_rgba(99,102,241,0.1)]"
+                      : done
+                      ? "bg-emerald-500/5 border-emerald-500/15"
+                      : "border-transparent"
+                  } ${future ? "opacity-30" : ""}`}
+                >
+                  {/* Icon */}
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-lg">
+                    {done ? "✅" : s.icon}
                   </div>
-                  <span style={{
-                    fontSize: "0.875rem",
-                    fontWeight: current ? 600 : 400,
-                    color: done ? "var(--color-success)" : current ? "var(--color-text-primary)" : "var(--color-text-muted)",
-                  }}>
-                    {s.label}
-                  </span>
+
+                  {/* Labels */}
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-semibold leading-tight ${
+                      done ? "text-emerald-400" : current ? "text-slate-100" : "text-slate-500"
+                    }`}>
+                      {s.label}
+                    </p>
+                    {current && (
+                      <p className="text-xs text-indigo-400 mt-0.5 animate-fade-in">{s.desc}</p>
+                    )}
+                  </div>
+
+                  {/* Spinner */}
                   {current && (
-                    <span className="spinner" style={{ marginLeft: "auto", width: 14, height: 14 }} />
+                    <div className="w-4 h-4 border-2 border-indigo-500/30 border-t-indigo-400 rounded-full animate-spin shrink-0" />
                   )}
                 </div>
               );
             })}
           </div>
 
+          {/* Failed action */}
           {failed && (
             <button
-              className="btn btn-outline"
+              className="w-full mt-6 py-3 rounded-xl border border-white/15 bg-transparent text-slate-300 text-sm font-semibold hover:bg-[#161827] transition-all"
               onClick={() => window.history.back()}
-              style={{ width: "100%", justifyContent: "center", marginTop: "1.5rem" }}
             >
               ← Try again
             </button>
           )}
         </div>
 
-        <p style={{ textAlign: "center", fontSize: "0.78rem", color: "var(--color-text-muted)", marginTop: "1rem" }}>
+        <p className="text-center text-xs text-slate-600 mt-4">
           ☕ This usually takes 2–4 minutes for 1,000 reviews.
         </p>
       </div>
-    </main>
+    </div>
   );
 }

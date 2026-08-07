@@ -3,282 +3,215 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getDashboard } from "@/lib/api";
-import type { DashboardData, IssueCluster } from "@/lib/types";
-
-const CATEGORY_BADGE: Record<string, string> = {
-  "Bug":              "badge-bug",
-  "Performance":      "badge-perf",
-  "UX":               "badge-ux",
-  "Feature Request":  "badge-feature",
-  "Praise":           "badge-praise",
-  "Pricing":          "badge-pricing",
-};
-
-function CategoryBadge({ cat }: { cat: string }) {
-  return (
-    <span className={`badge ${CATEGORY_BADGE[cat] || "badge-default"}`}>
-      {cat}
-    </span>
-  );
-}
-
-function MetricCard({
-  label, value, sub, accent, id
-}: { label: string; value: string; sub?: string; accent?: string; id: string }) {
-  return (
-    <div className="metric-card" id={id}>
-      <div className="metric-label">{label}</div>
-      <div className="metric-value" style={{ color: accent || "var(--color-text-primary)", marginTop: "0.5rem" }}>
-        {value}
-      </div>
-      {sub && <div style={{ fontSize: "0.78rem", color: "var(--color-text-muted)", marginTop: "0.375rem" }}>{sub}</div>}
-    </div>
-  );
-}
-
-function PriorityItem({ cluster, sessionId, rank }: { cluster: IssueCluster; sessionId: string; rank: number }) {
-  return (
-    <Link
-      href={`/dashboard/${sessionId}/evidence/${cluster.issue_key}`}
-      className="priority-item"
-      id={`priority-${cluster.issue_key}`}
-    >
-      <span className="priority-rank">#{rank}</span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.25rem", flexWrap: "wrap" }}>
-          <span style={{ fontWeight: 700, fontSize: "0.9rem" }}>
-            {cluster.issue_key.replace(/_/g, " ")}
-          </span>
-          <CategoryBadge cat={cluster.category} />
-        </div>
-        <div style={{ fontSize: "0.78rem", color: "var(--color-text-muted)", display: "flex", gap: "1rem", flexWrap: "wrap" }}>
-          <span>📊 {cluster.review_count} reviews</span>
-          {cluster.revenue_at_risk > 0 && (
-            <span className="revenue-risk">₹{(cluster.revenue_at_risk / 1000).toFixed(0)}K at risk</span>
-          )}
-          {cluster.premium_user_count > 0 && (
-            <span style={{ color: "var(--color-accent)" }}>⭐ {cluster.premium_user_count} premium</span>
-          )}
-        </div>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-        <div style={{ textAlign: "right" }}>
-          <div style={{
-            fontSize: "0.75rem", fontFamily: "JetBrains Mono, monospace",
-            color: "var(--color-primary-glow)", fontWeight: 700
-          }}>
-            {(cluster.priority_score * 100).toFixed(0)}
-          </div>
-          <div style={{ fontSize: "0.65rem", color: "var(--color-text-muted)" }}>score</div>
-        </div>
-        <span style={{ color: "var(--color-text-muted)", fontSize: "0.9rem" }}>→</span>
-      </div>
-    </Link>
-  );
-}
+import type { DashboardData } from "@/lib/types";
+import { Navbar } from "@/components/shared/Navbar";
+import { MetricCard } from "@/components/shared/MetricCard";
+import { PriorityItem } from "@/components/dashboard/PriorityItem";
+import { SkeletonDashboard } from "@/components/dashboard/SkeletonDashboard";
+import { ErrorState } from "@/components/shared/ErrorState";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function DashboardPage() {
   const params    = useParams();
   const sessionId = params.session_id as string;
 
-  const [data, setData]     = useState<DashboardData | null>(null);
+  const [data, setData]       = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState<string | null>(null);
+  const [error, setError]     = useState<string | null>(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
-  const [filter, setFilter] = useState("All");
+  const [filter, setFilter]   = useState("All");
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true);
+    setError(null);
     getDashboard(sessionId)
       .then(setData)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [sessionId]);
+  };
 
-  if (loading) return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--color-bg)" }}>
-      <div style={{ textAlign: "center" }}>
-        <span className="spinner" style={{ width: 40, height: 40 }} />
-        <p style={{ marginTop: "1rem", color: "var(--color-text-muted)" }}>Loading dashboard…</p>
-      </div>
-    </div>
-  );
+  useEffect(() => { load(); }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (error) return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--color-bg)" }}>
-      <div className="card" style={{ maxWidth: 400, textAlign: "center", padding: "2rem" }}>
-        <div style={{ fontSize: "2rem", marginBottom: "1rem" }}>⚠️</div>
-        <h3>Something went wrong</h3>
-        <p style={{ color: "var(--color-text-muted)", marginTop: "0.5rem", fontSize: "0.9rem" }}>{error}</p>
-      </div>
-    </div>
-  );
+  if (error) return <ErrorState message={error} onRetry={load} />;
 
-  if (!data) return null;
-
-  const filteredIssues = filter === "All"
-    ? data.issues
-    : data.issues.filter(i => i.category === filter);
-
-  const categories = ["All", ...Array.from(new Set(data.issues.map(i => i.category)))];
-  const totalRevenueAtRisk = data.revenue_at_risk;
+  const categories = data ? ["All", ...Array.from(new Set(data.issues.map(i => i.category)))] : ["All"];
+  const filteredIssues = data
+    ? (filter === "All" ? data.issues : data.issues.filter(i => i.category === filter))
+    : [];
 
   return (
-    <main style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
-      {/* ── Nav ── */}
-      <nav className="nav">
-        <div className="container" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.5rem", flexWrap: "wrap", gap: "0.5rem" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-            <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.5rem", textDecoration: "none" }}>
-              <div style={{ width: 28, height: 28, borderRadius: 7, background: "var(--gradient-brand)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.875rem" }}>🗺️</div>
-              <span style={{ fontWeight: 800, fontSize: "1rem" }}>RoadmapAI</span>
-            </Link>
-            <span style={{ color: "var(--color-border)", fontSize: "1.2rem" }}>·</span>
-            <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
-              {sessionId.slice(0, 8)}
-            </span>
-          </div>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <Link href={`/dashboard/${sessionId}/meeting`} className="btn btn-outline btn-sm" id="btn-nav-meeting">🎤 AI Meeting</Link>
-            <Link href={`/dashboard/${sessionId}/roadmap`} className="btn btn-outline btn-sm" id="btn-nav-roadmap">🗺️ Roadmap</Link>
-            <Link href={`/dashboard/${sessionId}/sprint`}  className="btn btn-outline btn-sm" id="btn-nav-sprint">⚡ Sprint</Link>
-          </div>
-        </div>
-      </nav>
+    <div className="min-h-screen bg-[#08090e]">
+      <Navbar
+        sessionId={sessionId}
+        actions={
+          <>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/dashboard/${sessionId}/meeting`} id="btn-nav-meeting">🎤 AI Meeting</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/dashboard/${sessionId}/roadmap`} id="btn-nav-roadmap">🗺️ Roadmap</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/dashboard/${sessionId}/sprint`} id="btn-nav-sprint">⚡ Sprint</Link>
+            </Button>
+            <Button asChild variant="secondary" size="sm">
+              <Link href={`/dashboard/${sessionId}/export`} id="btn-nav-export">⬇️ Export</Link>
+            </Button>
+          </>
+        }
+      />
 
-      <div className="container" style={{ paddingTop: "2rem", paddingBottom: "4rem" }}>
-        {/* ── AI Recommendation Banner ── */}
-        {data.ai_recommendation && (
-          <div style={{
-            background: "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(6,182,212,0.08))",
-            border: "1px solid rgba(99,102,241,0.25)",
-            borderRadius: "var(--radius-lg)", padding: "1rem 1.5rem",
-            marginBottom: "1.5rem", display: "flex", alignItems: "center", gap: "1rem",
-          }} className="animate-fade-in">
-            <div style={{ fontSize: "1.5rem" }}>🤖</div>
-            <div>
-              <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--color-primary-glow)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.25rem" }}>
-                AI Recommendation
-              </div>
-              <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>{data.ai_recommendation}</div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Headline Insights ── */}
-        {data.headline_insights.length > 0 && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "0.75rem", marginBottom: "1.5rem" }}>
-            {data.headline_insights.map((insight, i) => (
-              <div key={i} style={{
-                background: "var(--color-surface-2)", border: "1px solid var(--color-border)",
-                borderRadius: "var(--radius-md)", padding: "0.875rem 1.25rem",
-                fontSize: "0.875rem", color: "var(--color-text-secondary)",
-                display: "flex", gap: "0.625rem", alignItems: "flex-start",
-              }}>
-                <span style={{ color: "var(--color-primary-glow)" }}>◈</span>
-                {insight}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* ── Metric Cards ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
-          <MetricCard
-            id="metric-revenue"
-            label="Revenue at Risk"
-            value={`₹${(totalRevenueAtRisk / 1000).toFixed(1)}K`}
-            sub="Estimated from affected premium users"
-            accent="#ef4444"
-          />
-          <MetricCard
-            id="metric-top"
-            label="Highest Priority Issue"
-            value={data.top_priority_issue?.issue_key.replace(/_/g, " ") || "—"}
-            sub={data.top_priority_issue ? `${data.top_priority_issue.review_count} reviews` : ""}
-            accent="var(--color-text-primary)"
-          />
-          <MetricCard
-            id="metric-feature"
-            label="Most Requested Feature"
-            value={data.most_requested_feature?.issue_key.replace(/_/g, " ") || "—"}
-            sub={data.most_requested_feature ? `${data.most_requested_feature.review_count} mentions` : ""}
-            accent="var(--color-accent)"
-          />
-          <MetricCard
-            id="metric-reviews"
-            label="Reviews Analysed"
-            value={data.actionable_reviews.toLocaleString()}
-            sub={`of ${data.total_reviews.toLocaleString()} total`}
-            accent="var(--color-primary-glow)"
-          />
-        </div>
-
-        {/* ── Executive Summary ── */}
-        {data.executive_summary && (
-          <div className="card" style={{ marginBottom: "2rem" }}>
-            <button
-              onClick={() => setSummaryOpen(o => !o)}
-              style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "none", cursor: "pointer", padding: 0 }}
-              id="btn-toggle-summary"
-            >
-              <span style={{ fontWeight: 700, fontSize: "1rem" }}>📋 Executive Summary</span>
-              <span style={{ fontSize: "1.2rem", color: "var(--color-text-muted)", transform: summaryOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
-                ⌄
-              </span>
-            </button>
-            {summaryOpen && (
-              <div style={{ marginTop: "1rem", fontSize: "0.9rem", color: "var(--color-text-secondary)", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
-                {data.executive_summary}
+      <div className="mx-auto max-w-screen-xl px-6 py-8">
+        {loading ? (
+          <SkeletonDashboard />
+        ) : data ? (
+          <>
+            {/* ── AI Recommendation Banner ── */}
+            {data.ai_recommendation && (
+              <div className="flex items-start gap-4 p-4 rounded-2xl border border-indigo-500/25 bg-gradient-to-r from-indigo-500/10 to-cyan-500/6 mb-6 animate-fade-in">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center text-xl shrink-0">
+                  🤖
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 mb-1">AI Recommendation</p>
+                  <p className="text-sm font-semibold text-slate-100 leading-relaxed">{data.ai_recommendation}</p>
+                </div>
               </div>
             )}
-          </div>
-        )}
 
-        {/* ── Priority List ── */}
-        <div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem", flexWrap: "wrap", gap: "0.75rem" }}>
-            <h3>Priority Issues</h3>
-            <div style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
-              {categories.map(cat => (
-                <button
-                  key={cat}
-                  onClick={() => setFilter(cat)}
-                  id={`filter-${cat.replace(/\s/g, "-")}`}
-                  style={{
-                    padding: "0.3rem 0.75rem", borderRadius: 999,
-                    border: `1px solid ${filter === cat ? "var(--color-primary)" : "var(--color-border)"}`,
-                    background: filter === cat ? "rgba(99,102,241,0.15)" : "transparent",
-                    color: filter === cat ? "var(--color-text-primary)" : "var(--color-text-muted)",
-                    cursor: "pointer", fontSize: "0.78rem", fontWeight: 600,
-                    transition: "all var(--transition-fast)",
-                  }}
-                >
-                  {cat}
-                </button>
-              ))}
+            {/* ── Headline Insights ── */}
+            {data.headline_insights.length > 0 && (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6 animate-fade-in">
+                {data.headline_insights.map((insight, i) => (
+                  <div
+                    key={i}
+                    className="flex gap-3 items-start p-3.5 rounded-xl border border-white/7 bg-[#161827] text-sm text-slate-400"
+                  >
+                    <span className="text-indigo-400 text-base shrink-0">◈</span>
+                    <span className="leading-relaxed">{insight}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ── Metric Cards ── */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <MetricCard
+                id="metric-revenue"
+                label="Revenue at Risk"
+                value={`₹${(data.revenue_at_risk / 1000).toFixed(1)}K`}
+                sub="Estimated from affected premium users"
+                accentColor="#ef4444"
+                icon="🔴"
+              />
+              <MetricCard
+                id="metric-top"
+                label="Top Priority Issue"
+                value={data.top_priority_issue?.issue_key.replace(/_/g, " ") || "—"}
+                sub={data.top_priority_issue ? `${data.top_priority_issue.review_count} reviews` : ""}
+                icon="🏆"
+              />
+              <MetricCard
+                id="metric-feature"
+                label="Most Requested Feature"
+                value={data.most_requested_feature?.issue_key.replace(/_/g, " ") || "—"}
+                sub={data.most_requested_feature ? `${data.most_requested_feature.review_count} mentions` : ""}
+                accentColor="#22d3ee"
+                icon="✨"
+              />
+              <MetricCard
+                id="metric-reviews"
+                label="Reviews Analysed"
+                value={data.actionable_reviews.toLocaleString()}
+                sub={`of ${data.total_reviews.toLocaleString()} total`}
+                accentColor="#818cf8"
+                icon="📊"
+              />
             </div>
-          </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            {filteredIssues.map((cluster, i) => (
-              <PriorityItem key={cluster.id} cluster={cluster} sessionId={sessionId} rank={cluster.priority_rank || i + 1} />
-            ))}
-          </div>
-        </div>
+            {/* ── Executive Summary ── */}
+            {data.executive_summary && (
+              <div className="rounded-2xl border border-white/7 bg-[#0f111a] mb-6 overflow-hidden">
+                <button
+                  onClick={() => setSummaryOpen(o => !o)}
+                  id="btn-toggle-summary"
+                  className="w-full flex items-center justify-between p-5 hover:bg-[#161827] transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-lg">📋</span>
+                    <span className="font-bold text-sm text-slate-100">Executive Summary</span>
+                  </div>
+                  <span className={`text-slate-500 text-sm transition-transform duration-200 ${summaryOpen ? "rotate-180" : ""}`}>
+                    ▼
+                  </span>
+                </button>
+                {summaryOpen && (
+                  <div className="px-5 pb-5 pt-0 animate-fade-in">
+                    <div className="border-t border-white/7 pt-4 text-sm text-slate-400 leading-relaxed whitespace-pre-wrap">
+                      {data.executive_summary}
+                    </div>
+                    <div className="mt-4">
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={`/dashboard/${sessionId}/export`}>📄 Full Report →</Link>
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
-        {/* ── CTA Row ── */}
-        <div style={{ display: "flex", gap: "1rem", marginTop: "2.5rem", flexWrap: "wrap" }}>
-          <Link href={`/dashboard/${sessionId}/meeting`} className="btn btn-primary btn-lg" id="btn-start-meeting">
-            🎤 Start AI Review Meeting
-          </Link>
-          <Link href={`/dashboard/${sessionId}/roadmap`} className="btn btn-outline btn-lg" id="btn-view-roadmap">
-            🗺️ View Roadmap
-          </Link>
-          <Link href={`/dashboard/${sessionId}/sprint`} className="btn btn-outline btn-lg" id="btn-view-sprint">
-            ⚡ View Sprint
-          </Link>
-        </div>
+            {/* ── Priority Issues ── */}
+            <div>
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                <h2 className="text-xl font-bold text-slate-100">Priority Issues</h2>
+                <Tabs value={filter} onValueChange={setFilter}>
+                  <TabsList>
+                    {categories.map(cat => (
+                      <TabsTrigger
+                        key={cat}
+                        value={cat}
+                        id={`filter-${cat.replace(/\s/g, "-")}`}
+                      >
+                        {cat}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+              </div>
+
+              <div className="flex flex-col gap-2.5">
+                {filteredIssues.map((cluster, i) => (
+                  <PriorityItem
+                    key={cluster.id}
+                    cluster={cluster}
+                    sessionId={sessionId}
+                    rank={cluster.priority_rank || i + 1}
+                  />
+                ))}
+                {filteredIssues.length === 0 && (
+                  <div className="text-center py-12 text-slate-500 text-sm">
+                    No issues found for this category.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── CTA Row ── */}
+            <div className="flex gap-3 mt-8 flex-wrap">
+              <Button asChild size="lg" id="btn-start-meeting">
+                <Link href={`/dashboard/${sessionId}/meeting`}>🎤 Start AI Review Meeting</Link>
+              </Button>
+              <Button asChild variant="outline" size="lg" id="btn-view-roadmap">
+                <Link href={`/dashboard/${sessionId}/roadmap`}>🗺️ View Roadmap</Link>
+              </Button>
+              <Button asChild variant="outline" size="lg" id="btn-view-sprint">
+                <Link href={`/dashboard/${sessionId}/sprint`}>⚡ View Sprint</Link>
+              </Button>
+            </div>
+          </>
+        ) : null}
       </div>
-    </main>
+    </div>
   );
 }
