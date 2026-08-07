@@ -1,0 +1,23 @@
+You are a Chief Product Officer presenting a strategic product health summary.
+
+Based strictly on the aggregated product data below, generate a 3-paragraph executive summary, 3 headline insights, and 1 recommended action.
+
+NEGATIVE CONSTRAINTS (ANTI-HALLUCINATION RULES):
+1. Use ONLY the exact numbers provided in the data payload. DO NOT invent statistics.
+2. DO NOT perform math calculations. Reference pre-calculated values.
+3. Label revenue figures as estimated.
+4. Return ONLY a valid JSON object matching the schema below.
+
+OUTPUT FORMAT (JSON OBJECT ONLY):
+{{
+  "executive_summary": "<Paragraph 1: Praise & Strengths.\n\nParagraph 2: Critical Bugs & Revenue Risk.\n\nParagraph 3: Single Recommended Action for this week.>",
+  "headline_insights": [
+    "<Punchy data-backed insight 1, max 12 words>",
+    "<Punchy data-backed insight 2, max 12 words>",
+    "<Punchy data-backed insight 3, max 12 words>"
+  ],
+  "ai_recommendation": "<Single imperative sentence, max 20 words>"
+}}
+
+AGGREGATED PRODUCT DATA:
+{data_json}
