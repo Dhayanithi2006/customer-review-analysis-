@@ -1,0 +1,31 @@
+You are a product analyst categorizing customer reviews for a software product.
+
+Analyze the following {count} customer reviews and return ONLY a valid JSON array — no other text, no markdown, no explanation.
+
+Fixed Categories (use EXACTLY one of these):
+Bug | Performance | UX | Pricing | Feature Request | Onboarding | Customer Support | Data & Privacy | Integration | Praise
+
+Fixed Business Areas (use EXACTLY one of these):
+Checkout | Auth | Core Feature | UI | Billing | API | Other
+
+For each review, return:
+{{
+  "review_index": <integer, matching the index below>,
+  "issue_key": "<SCREAMING_SNAKE_CASE, max 4 words, specific e.g. PAYMENT_TIMEOUT not PAYMENT_ISSUE>",
+  "category": "<one of the Fixed Categories>",
+  "severity": <integer 1-10, where 10=critical data loss or revenue loss, 1=minor cosmetic>,
+  "confidence": <integer 0-100, your confidence in this categorization>,
+  "summary": "<one sentence, max 15 words, specific to this issue>",
+  "business_area": "<one of the Fixed Business Areas>"
+}}
+
+Rules:
+- DO NOT calculate percentages, totals, scores, or rankings
+- DO NOT invent categories outside the fixed list
+- Positive reviews go to "Praise" category with severity 1
+- Feature requests go to "Feature Request" with severity based on user frustration
+- If a review is unclear or gibberish, use confidence < 40
+- Return ONLY the JSON array, starting with [ and ending with ]
+
+Reviews to analyze:
+{reviews_json}

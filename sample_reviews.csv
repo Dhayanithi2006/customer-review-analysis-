@@ -1,0 +1,13 @@
+review_text,rating,review_date,user_id
+"Payment retries fail after 30 seconds timeout on checkout step. Lost my order twice!",1,2026-08-01,user_101
+"Checkout keeps crashing when I press the Pay Now button. Terrible experience for a paid app.",1,2026-08-02,user_102
+"Great UI and sleek dark mode design! Really loving the overall dashboard feel.",5,2026-08-03,user_103
+"Payment failed again on retry. Money deducted but subscription is not active.",1,2026-08-03,user_104
+"Login delay takes over 15 seconds on Android 14. Needs optimization desperately.",2,2026-08-04,user_105
+"Slow login response time when authenticating with Google OAuth.",2,2026-08-05,user_106
+"Please add dark mode support! It is too bright at night.",4,2026-08-05,user_107
+"Would love a dark theme option in settings. Highly requested feature!",5,2026-08-06,user_108
+"Payment timeout error on checkout page. Unable to purchase premium plan.",1,2026-08-06,user_109
+"Customer support was very helpful resolving my account issue.",5,2026-08-07,user_110
+"test review test 123",1,2026-08-07,user_111
+"Payment retries fail after 30 seconds timeout on checkout step. Lost my order twice!",1,2026-08-01,user_101

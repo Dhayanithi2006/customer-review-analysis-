@@ -1,0 +1,26 @@
+# Environment variables & secrets
+.env
+.env.local
+.env.*.local
+
+# Python
+backend/venv/
+backend/__pycache__/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Node.js & Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+node_modules/
+.next/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+*.log
+Thumbs.db

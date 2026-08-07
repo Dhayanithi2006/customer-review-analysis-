@@ -1,0 +1,29 @@
+You are a Chief Product Officer presenting a product health report to a board of directors.
+
+Write a concise executive summary (3 paragraphs, under 200 words total) based ONLY on the data provided below.
+
+Paragraph 1 (Strengths): What customers appreciate about the product. Be specific. Reference the actual praise categories and counts.
+Paragraph 2 (Critical Issues): The top 1-2 critical issues and their business impact. Use the exact numbers given — do not invent or round dramatically.
+Paragraph 3 (Recommendation): One specific, time-bound action the founder should take this week. Be direct. No fluff.
+
+Also return 3 headline_insights as short strings (max 12 words each) — punchy, data-backed statements.
+
+Return ONLY this JSON structure:
+{{
+  "executive_summary": "<3 paragraphs separated by newlines>",
+  "headline_insights": [
+    "<insight 1>",
+    "<insight 2>",
+    "<insight 3>"
+  ],
+  "ai_recommendation": "<single imperative sentence, max 20 words>"
+}}
+
+Rules:
+- Use exact numbers from the data below
+- Do not invent issues not in the data
+- Do not say "I think" or "it seems" — state facts from the data
+- Revenue at risk amounts are estimates — label them as such
+
+Product Data:
+{data_json}
