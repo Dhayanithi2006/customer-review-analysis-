@@ -30,11 +30,11 @@ SPAM_MAX_SPECIAL_RATIO: float = 0.6
 FUZZY_DUPLICATE_THRESHOLD: float = 0.88
 
 # Priority Engine Formula Weights
-WEIGHT_REVENUE: float = 0.30
-WEIGHT_FREQUENCY: float = 0.25
+# Formula: Revenue×0.35 + Frequency×0.30 + Severity×0.20 + CustomerTier×0.15
+WEIGHT_REVENUE: float = 0.35
+WEIGHT_FREQUENCY: float = 0.30
 WEIGHT_SEVERITY: float = 0.20
 WEIGHT_TIER: float = 0.15
-WEIGHT_RECENCY: float = 0.10
 
 # Gemini Settings
 GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")

@@ -11,6 +11,17 @@ export interface Session {
   created_at: string;
 }
 
+export interface DecisionPillars {
+  revenue_impact: number;
+  customer_reach: number;
+  severity: number;
+  premium_users: number;
+  revenue_pct: number;
+  reach_pct: number;
+  severity_pct: number;
+  premium_pct: number;
+}
+
 export interface IssueCluster {
   id: string;
   session_id: string;
@@ -28,6 +39,7 @@ export interface IssueCluster {
   revenue_at_risk: number;
   platforms: string[];
   sample_reviews: string[];
+  decision_pillars?: DecisionPillars;
 }
 
 export interface DashboardData {

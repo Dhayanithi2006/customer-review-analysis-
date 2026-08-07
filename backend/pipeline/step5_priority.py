@@ -1,31 +1,16 @@
 """
-Step 5 — Priority Engine
-Calculates priority score for every issue cluster.
+Step 5 — Priority Engine (Decision Intelligence Engine)
+Calculates deterministic priority score for every issue cluster.
 Pure backend formula — zero AI.
 
-Priority = Revenue×0.30 + Frequency×0.25 + Severity×0.20 + Tier×0.15 + Recency×0.10
+Formula:
+Priority = Revenue×0.35 + Frequency×0.30 + Severity×0.20 + CustomerTier×0.15
 """
-from datetime import date, datetime
 from database import get_db
 from config import (
     WEIGHT_REVENUE, WEIGHT_FREQUENCY, WEIGHT_SEVERITY,
-    WEIGHT_TIER, WEIGHT_RECENCY, AVG_REVENUE_PER_USER,
+    WEIGHT_TIER, AVG_REVENUE_PER_USER,
 )
-
-
-def _recency_norm(latest_date_str: str | None) -> float:
-    """Returns 1.0 for today, decays to 0 over 90 days."""
-    if not latest_date_str:
-        return 0.5  # Unknown date → neutral recency
-    try:
-        if isinstance(latest_date_str, str):
-            latest = datetime.fromisoformat(latest_date_str[:10]).date()
-        else:
-            latest = latest_date_str
-        days_ago = (date.today() - latest).days
-        return max(0.0, 1.0 - days_ago / 90.0)
-    except Exception:
-        return 0.5
 
 
 def run(session_id: str) -> dict:
@@ -44,41 +29,25 @@ def run(session_id: str) -> dict:
 
     total_reviews = sum(c["review_count"] for c in clusters)
     total_premium = sum(c["premium_user_count"] for c in clusters)
-    max_count     = max(c["review_count"] for c in clusters)
-
-    # Fetch latest review date per cluster for recency
-    # (Use the categorizations table since it links reviews to issues)
-    latest_dates: dict[str, str] = {}
-    for cluster in clusters:
-        result = (
-            db.table("categorizations")
-            .select("reviews(review_date)")
-            .eq("session_id", session_id)
-            .eq("issue_key", cluster["issue_key"])
-            .order("reviews(review_date)", desc=True)
-            .limit(1)
-            .execute()
-            .data
-        )
-        if result and result[0].get("reviews"):
-            latest_dates[cluster["issue_key"]] = result[0]["reviews"].get("review_date", "")
 
     scored = []
     for c in clusters:
-        freq_norm    = c["review_count"] / max(total_reviews, 1)
+        freq_norm     = c["review_count"] / max(total_reviews, 1)
         severity_norm = (c["avg_severity"] or 5) / 10.0
-        tier_norm    = c["premium_user_count"] / max(c["review_count"], 1)
-        revenue_norm = c["premium_user_count"] / max(total_premium, 1)
-        recency      = _recency_norm(latest_dates.get(c["issue_key"]))
+        premium_ratio = c["premium_user_count"] / max(c["review_count"], 1)
+        tier_norm     = 0.2 + (0.8 * premium_ratio)
 
-        score = (
-            revenue_norm   * WEIGHT_REVENUE   +
-            freq_norm      * WEIGHT_FREQUENCY +
-            severity_norm  * WEIGHT_SEVERITY  +
-            tier_norm      * WEIGHT_TIER      +
-            recency        * WEIGHT_RECENCY
-        )
+        if total_premium > 0:
+            revenue_norm = c["premium_user_count"] / max(total_premium, 1)
+        else:
+            revenue_norm = severity_norm
 
+        rev_part  = revenue_norm  * WEIGHT_REVENUE
+        reach_part = freq_norm     * WEIGHT_FREQUENCY
+        sev_part   = severity_norm * WEIGHT_SEVERITY
+        tier_part  = tier_norm     * WEIGHT_TIER
+
+        score = rev_part + reach_part + sev_part + tier_part
         revenue_at_risk = c["premium_user_count"] * AVG_REVENUE_PER_USER
 
         scored.append({

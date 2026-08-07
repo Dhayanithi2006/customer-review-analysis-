@@ -130,6 +130,40 @@ function IssueCard({ cluster, sessionId, rank }: { cluster: IssueCluster; sessio
         </div>
       </div>
 
+      {/* Decision Score Pillars Breakdown */}
+      <div className="px-5 py-2.5 border-t border-white/5 bg-[#0a0c14] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400">Decision Score Pillars</span>
+          <span className="text-[10px] text-slate-500">(Formula Breakdown)</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full sm:w-auto">
+          <div className="flex items-center gap-1.5" title="Revenue Impact (35% weight)">
+            <div className="h-1.5 w-10 rounded-full bg-white/10 overflow-hidden">
+              <div className="h-full bg-red-400 rounded-full" style={{ width: `${cluster.decision_pillars?.revenue_pct || 35}%` }} />
+            </div>
+            <span className="text-[10px] font-mono text-slate-400">Revenue: {cluster.decision_pillars?.revenue_pct || 35}%</span>
+          </div>
+          <div className="flex items-center gap-1.5" title="Customer Reach (30% weight)">
+            <div className="h-1.5 w-10 rounded-full bg-white/10 overflow-hidden">
+              <div className="h-full bg-indigo-400 rounded-full" style={{ width: `${cluster.decision_pillars?.reach_pct || 30}%` }} />
+            </div>
+            <span className="text-[10px] font-mono text-slate-400">Reach: {cluster.decision_pillars?.reach_pct || 30}%</span>
+          </div>
+          <div className="flex items-center gap-1.5" title="Severity (20% weight)">
+            <div className="h-1.5 w-10 rounded-full bg-white/10 overflow-hidden">
+              <div className="h-full bg-amber-400 rounded-full" style={{ width: `${cluster.decision_pillars?.severity_pct || 20}%` }} />
+            </div>
+            <span className="text-[10px] font-mono text-slate-400">Severity: {cluster.decision_pillars?.severity_pct || 20}%</span>
+          </div>
+          <div className="flex items-center gap-1.5" title="Premium Tier (15% weight)">
+            <div className="h-1.5 w-10 rounded-full bg-white/10 overflow-hidden">
+              <div className="h-full bg-purple-400 rounded-full" style={{ width: `${cluster.decision_pillars?.premium_pct || 15}%` }} />
+            </div>
+            <span className="text-[10px] font-mono text-slate-400">Tier: {cluster.decision_pillars?.premium_pct || 15}%</span>
+          </div>
+        </div>
+      </div>
+
       {/* Recommendation footer */}
       <div className={`flex items-center justify-between px-5 py-3 ${isCritical ? "bg-red-500/5 border-t border-red-500/10" : "bg-white/[0.02] border-t border-white/5"}`}>
         <div className="flex items-center gap-2">
