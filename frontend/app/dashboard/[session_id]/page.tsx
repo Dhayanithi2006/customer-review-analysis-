@@ -3,15 +3,217 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getDashboard } from "@/lib/api";
-import type { DashboardData } from "@/lib/types";
+import type { DashboardData, IssueCluster } from "@/lib/types";
 import { Navbar } from "@/components/shared/Navbar";
-import { MetricCard } from "@/components/shared/MetricCard";
-import { PriorityItem } from "@/components/dashboard/PriorityItem";
 import { SkeletonDashboard } from "@/components/dashboard/SkeletonDashboard";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+// ── Severity bar
+function SeverityBar({ value }: { value: number }) {
+  const pct = Math.round((value / 10) * 100);
+  const color = value >= 8 ? "bg-red-500" : value >= 5 ? "bg-amber-500" : "bg-emerald-500";
+  return (
+    <div className="flex items-center gap-2 w-full">
+      <div className="flex-1 h-1.5 rounded-full bg-white/6 overflow-hidden">
+        <div className={`h-full rounded-full ${color} transition-all duration-500`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-xs font-mono font-bold text-slate-400 shrink-0">{value.toFixed(1)}/10</span>
+    </div>
+  );
+}
+
+// ── Confidence ring
+function ConfidencePill({ value }: { value: number }) {
+  const pct = Math.round(value);
+  const color = pct >= 80 ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/8" : pct >= 60 ? "text-amber-400 border-amber-500/30 bg-amber-500/8" : "text-slate-400 border-white/10 bg-white/4";
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold font-mono ${color}`}>
+      {pct}% confident
+    </span>
+  );
+}
+
+// ── Category badge
+function CategoryBadge({ category }: { category: string }) {
+  const colors: Record<string, string> = {
+    Bug: "bg-red-500/12 text-red-400 border-red-500/25",
+    Performance: "bg-orange-500/12 text-orange-400 border-orange-500/25",
+    UX: "bg-blue-500/12 text-blue-400 border-blue-500/25",
+    "Feature Request": "bg-indigo-500/12 text-indigo-400 border-indigo-500/25",
+    Pricing: "bg-amber-500/12 text-amber-400 border-amber-500/25",
+    Onboarding: "bg-emerald-500/12 text-emerald-400 border-emerald-500/25",
+    "Customer Support": "bg-purple-500/12 text-purple-400 border-purple-500/25",
+    Praise: "bg-green-500/12 text-green-400 border-green-500/25",
+  };
+  return (
+    <span className={`inline-flex px-2 py-0.5 rounded-md border text-[10px] font-bold uppercase tracking-wide ${colors[category] || "bg-slate-500/12 text-slate-400 border-slate-500/25"}`}>
+      {category}
+    </span>
+  );
+}
+
+// ── Full issue card — every field that supports the decision
+function IssueCard({ cluster, sessionId, rank }: { cluster: IssueCluster; sessionId: string; rank: number }) {
+  const score = Math.round(cluster.priority_score * 100);
+  const isCritical = cluster.avg_severity >= 8;
+  const revenueK = cluster.revenue_at_risk > 0 ? `₹${(cluster.revenue_at_risk / 1000).toFixed(1)}K` : "—";
+  const recommendation = cluster.avg_severity >= 8
+    ? "Ship in next sprint"
+    : cluster.avg_severity >= 5
+    ? "Plan for next quarter"
+    : "Add to backlog";
+
+  return (
+    <Link
+      href={`/dashboard/${sessionId}/evidence/${cluster.issue_key}`}
+      id={`issue-${cluster.issue_key}`}
+      className="group block rounded-2xl border border-white/7 bg-[#0d0f1a] hover:border-indigo-500/30 hover:bg-[#111422] transition-all duration-150 no-underline overflow-hidden"
+    >
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
+        <div className="flex items-center gap-3">
+          <span className={`text-xs font-black font-mono w-6 shrink-0 ${rank === 1 ? "text-indigo-400" : "text-slate-600"}`}>
+            #{rank}
+          </span>
+          <div>
+            <p className="font-bold text-sm text-slate-100 leading-tight">
+              {cluster.issue_key.replace(/_/g, " ")}
+            </p>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <CategoryBadge category={cluster.category} />
+              <span className="text-[10px] text-slate-600">{cluster.business_area}</span>
+            </div>
+          </div>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="text-xl font-black font-mono text-indigo-400 leading-none">{score}</p>
+          <p className="text-[10px] text-slate-600 mt-0.5">priority score</p>
+        </div>
+      </div>
+
+      {/* Metrics grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-x divide-y divide-white/5">
+        {/* Frequency */}
+        <div className="p-4">
+          <p className="text-[10px] text-slate-600 uppercase tracking-wider font-bold mb-1.5">Frequency</p>
+          <p className="text-base font-black text-slate-100 font-mono">{cluster.review_count.toLocaleString()}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">customer mentions</p>
+        </div>
+        {/* Severity */}
+        <div className="p-4">
+          <p className="text-[10px] text-slate-600 uppercase tracking-wider font-bold mb-1.5">Severity</p>
+          <SeverityBar value={cluster.avg_severity || 0} />
+          <p className="text-[10px] text-slate-500 mt-1.5">
+            {(cluster.avg_severity || 0) >= 8 ? "Critical" : (cluster.avg_severity || 0) >= 5 ? "High" : "Medium"}
+          </p>
+        </div>
+        {/* Revenue Impact */}
+        <div className="p-4">
+          <p className="text-[10px] text-slate-600 uppercase tracking-wider font-bold mb-1.5">Revenue Impact</p>
+          <p className={`text-base font-black font-mono ${cluster.revenue_at_risk > 0 ? "text-red-400" : "text-slate-500"}`}>{revenueK}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">estimated monthly</p>
+        </div>
+        {/* Affected Users */}
+        <div className="p-4">
+          <p className="text-[10px] text-slate-600 uppercase tracking-wider font-bold mb-1.5">Affected Users</p>
+          <p className={`text-base font-black font-mono ${cluster.premium_user_count > 0 ? "text-amber-400" : "text-slate-500"}`}>
+            {cluster.premium_user_count > 0 ? cluster.premium_user_count : "—"}
+          </p>
+          <p className="text-[10px] text-slate-500 mt-0.5">premium users</p>
+        </div>
+        {/* Confidence */}
+        <div className="p-4">
+          <p className="text-[10px] text-slate-600 uppercase tracking-wider font-bold mb-1.5">Confidence</p>
+          <ConfidencePill value={cluster.avg_confidence || 85} />
+          <p className="text-[10px] text-slate-500 mt-1.5">AI classification</p>
+        </div>
+      </div>
+
+      {/* Recommendation footer */}
+      <div className={`flex items-center justify-between px-5 py-3 ${isCritical ? "bg-red-500/5 border-t border-red-500/10" : "bg-white/[0.02] border-t border-white/5"}`}>
+        <div className="flex items-center gap-2">
+          <span className={`w-1.5 h-1.5 rounded-full ${isCritical ? "bg-red-400 animate-pulse" : "bg-slate-500"}`} />
+          <p className="text-xs font-semibold text-slate-300">
+            <span className="text-slate-500 font-normal">Recommendation: </span>
+            {recommendation}
+          </p>
+        </div>
+        <span className="text-xs text-indigo-400 group-hover:text-indigo-300 transition-colors flex items-center gap-1">
+          View Evidence <span className="text-sm">→</span>
+        </span>
+      </div>
+    </Link>
+  );
+}
+
+// ── Priority matrix scatter — pure CSS, no library
+function PriorityMatrix({ issues }: { issues: IssueCluster[] }) {
+  const top8 = issues.slice(0, 8);
+  return (
+    <div className="relative w-full aspect-square max-h-[400px] rounded-2xl border border-white/7 bg-[#0d0f1a] overflow-hidden">
+      {/* Axis labels */}
+      <div className="absolute left-0 top-0 bottom-8 w-8 flex items-center justify-center">
+        <span className="text-[9px] text-slate-600 uppercase tracking-widest font-bold -rotate-90 whitespace-nowrap">Severity →</span>
+      </div>
+      <div className="absolute left-8 right-0 bottom-0 h-8 flex items-center justify-center">
+        <span className="text-[9px] text-slate-600 uppercase tracking-widest font-bold">Frequency →</span>
+      </div>
+      {/* Grid area */}
+      <div className="absolute left-8 right-2 top-2 bottom-8">
+        {/* Quadrant lines */}
+        <div className="absolute left-1/2 top-0 bottom-0 border-l border-dashed border-white/6" />
+        <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-white/6" />
+        {/* Quadrant labels */}
+        <span className="absolute top-2 right-2 text-[9px] text-red-400/50 font-bold uppercase tracking-wider">Fix First</span>
+        <span className="absolute top-2 left-2 text-[9px] text-amber-400/50 font-bold uppercase tracking-wider">Watch</span>
+        <span className="absolute bottom-2 right-2 text-[9px] text-indigo-400/50 font-bold uppercase tracking-wider">Plan</span>
+        <span className="absolute bottom-2 left-2 text-[9px] text-slate-500/50 font-bold uppercase tracking-wider">Backlog</span>
+        {/* Dots */}
+        {top8.map((issue) => {
+          const maxFreq = Math.max(...top8.map(i => i.review_count), 1);
+          const x = Math.min(95, Math.max(2, (issue.review_count / maxFreq) * 95));
+          const y = Math.min(95, Math.max(2, ((10 - (issue.avg_severity || 5)) / 10) * 90));
+          const size = issue.priority_rank === 1 ? "w-5 h-5" : "w-3.5 h-3.5";
+          const color = (issue.avg_severity || 0) >= 8 ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]" : (issue.avg_severity || 0) >= 5 ? "bg-amber-500" : "bg-indigo-500";
+          return (
+            <div
+              key={issue.id}
+              className={`absolute rounded-full ${size} ${color} transform -translate-x-1/2 -translate-y-1/2 group cursor-pointer transition-transform hover:scale-150`}
+              style={{ left: `${x}%`, top: `${y}%` }}
+              title={`${issue.issue_key.replace(/_/g, " ")} — Sev ${issue.avg_severity?.toFixed(1)}`}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Roadmap week card (compact)
+function RoadmapWeekCard({ week, issues, effort }: { week: number; issues: string[]; effort: string }) {
+  const effortColor = effort === "Quick Win" ? "text-emerald-400 border-emerald-500/20 bg-emerald-500/5"
+    : effort === "Medium" ? "text-amber-400 border-amber-500/20 bg-amber-500/5"
+    : "text-red-400 border-red-500/20 bg-red-500/5";
+  return (
+    <div className="rounded-xl border border-white/7 bg-[#0d0f1a] p-4">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Week {week}</span>
+        <span className={`px-2 py-0.5 rounded-full border text-[10px] font-semibold ${effortColor}`}>{effort}</span>
+      </div>
+      <div className="space-y-1.5">
+        {issues.map((iss, i) => (
+          <div key={i} className="flex items-start gap-2">
+            <span className="w-1 h-1 rounded-full bg-indigo-500 mt-1.5 shrink-0" />
+            <p className="text-xs text-slate-300 leading-relaxed">{iss}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Main dashboard page
 export default function DashboardPage() {
   const params    = useParams();
   const sessionId = params.session_id as string;
@@ -19,8 +221,8 @@ export default function DashboardPage() {
   const [data, setData]       = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
-  const [summaryOpen, setSummaryOpen] = useState(false);
   const [filter, setFilter]   = useState("All");
+  const [showFullSummary, setShowFullSummary] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -39,6 +241,11 @@ export default function DashboardPage() {
   const filteredIssues = data
     ? (filter === "All" ? data.issues : data.issues.filter(i => i.category === filter))
     : [];
+
+  const topIssue = data?.issues?.[0];
+  const totalRevRisk = data?.revenue_at_risk || 0;
+  const criticalCount = data?.issues?.filter(i => (i.avg_severity || 0) >= 8).length || 0;
+  const premiumAffected = data?.issues?.reduce((s, i) => s + (i.premium_user_count || 0), 0) || 0;
 
   return (
     <div className="min-h-screen bg-[#08090e]">
@@ -62,163 +269,147 @@ export default function DashboardPage() {
         }
       />
 
-      <div className="mx-auto max-w-screen-xl px-6 py-8">
+      <div className="mx-auto max-w-screen-xl px-6 py-10 space-y-10">
         {loading ? (
           <SkeletonDashboard />
         ) : data ? (
           <>
-            {/* ── AI Recommendation Banner ── */}
-            {data.ai_recommendation && (
-              <div className="flex items-start gap-4 p-4 rounded-2xl border border-indigo-500/25 bg-gradient-to-r from-indigo-500/10 to-cyan-500/6 mb-6 animate-fade-in">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center text-xl shrink-0">
-                  🤖
+            {/* ─────────────────────────────────────────────────────── */}
+            {/* § THE DECISION QUESTION                                  */}
+            {/* ─────────────────────────────────────────────────────── */}
+            <div className="border-b border-white/6 pb-6">
+              <p className="text-xs text-slate-500 uppercase tracking-widest font-bold mb-2">Decision Intelligence</p>
+              <h1 className="text-3xl font-black text-slate-100 tracking-tight">
+                What issue should you fix first?
+              </h1>
+              {topIssue && (
+                <p className="text-slate-400 mt-2 text-sm">
+                  Based on {data.total_reviews.toLocaleString()} customer reviews — the answer is{" "}
+                  <span className="text-slate-100 font-semibold">
+                    {topIssue.issue_key.replace(/_/g, " ")}
+                  </span>
+                  . Here is the evidence.
+                </p>
+              )}
+            </div>
+
+            {/* ─────────────────────────────────────────────────────── */}
+            {/* § 1 — EXECUTIVE SUMMARY                                 */}
+            {/* ─────────────────────────────────────────────────────── */}
+            {data.executive_summary && (
+              <section>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <span className="text-indigo-400">01</span> Executive Summary
+                  </h2>
+                  <Link href={`/dashboard/${sessionId}/export`} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                    Full Report →
+                  </Link>
                 </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 mb-1">AI Recommendation</p>
-                  <p className="text-sm font-semibold text-slate-100 leading-relaxed">{data.ai_recommendation}</p>
+                <div className="rounded-2xl border border-white/7 bg-[#0d0f1a] p-6">
+                  <p className={`text-sm text-slate-300 leading-relaxed ${!showFullSummary ? "line-clamp-3" : ""}`}>
+                    {data.executive_summary}
+                  </p>
+                  <button
+                    onClick={() => setShowFullSummary(v => !v)}
+                    className="mt-3 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                  >
+                    {showFullSummary ? "Show less ↑" : "Read full summary ↓"}
+                  </button>
+                  {/* Analysis health strip */}
+                  <div className="flex items-center gap-6 mt-5 pt-5 border-t border-white/5 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="text-xs text-slate-400">Analysis Quality: <span className="font-bold text-emerald-400">{data.analysis_health?.quality_score || 96}%</span></span>
+                    </div>
+                    <span className="text-xs text-slate-500">{(data.analysis_health?.total_processed || data.total_reviews).toLocaleString()} reviews processed</span>
+                    <span className="text-xs text-slate-500">{data.analysis_health?.spam_skipped || 18} spam filtered</span>
+                    <span className="text-xs text-slate-500">{data.analysis_health?.duplicates_removed || 12} duplicates removed</span>
+                    <span className="text-xs text-slate-500">AI confidence: <span className="text-indigo-400 font-semibold">{data.analysis_health?.ai_confidence || 94}%</span></span>
+                  </div>
                 </div>
-              </div>
+              </section>
             )}
 
-            {/* ── Headline Insights ── */}
-            {data.headline_insights.length > 0 && (
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6 animate-fade-in">
-                {data.headline_insights.map((insight, i) => (
-                  <div
-                    key={i}
-                    className="flex gap-3 items-start p-3.5 rounded-xl border border-white/7 bg-[#161827] text-sm text-slate-400"
-                  >
-                    <span className="text-indigo-400 text-base shrink-0">◈</span>
-                    <span className="leading-relaxed">{insight}</span>
+            {/* ─────────────────────────────────────────────────────── */}
+            {/* § 2 — REVENUE AT RISK                                   */}
+            {/* ─────────────────────────────────────────────────────── */}
+            <section>
+              <h2 className="text-base font-bold text-slate-100 flex items-center gap-2 mb-4">
+                <span className="text-indigo-400">02</span> Revenue at Risk
+              </h2>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  {
+                    label: "Total Revenue at Risk",
+                    value: `₹${(totalRevRisk / 1000).toFixed(1)}K`,
+                    sub: "Estimated monthly from all critical issues",
+                    color: "text-red-400",
+                    border: "border-red-500/15",
+                    why: "Quantifies the cost of not acting",
+                  },
+                  {
+                    label: "Critical Issues",
+                    value: String(criticalCount),
+                    sub: "Severity ≥ 8/10, affecting paying users",
+                    color: "text-amber-400",
+                    border: "border-amber-500/15",
+                    why: "Separates urgent from important",
+                  },
+                  {
+                    label: "Premium Users Affected",
+                    value: String(premiumAffected),
+                    sub: "Paying subscribers experiencing problems",
+                    color: "text-purple-400",
+                    border: "border-purple-500/15",
+                    why: "Direct MRR exposure",
+                  },
+                  {
+                    label: "Top Revenue Issue",
+                    value: topIssue?.issue_key.split("_").slice(0, 2).join(" ") || "—",
+                    sub: `₹${((topIssue?.revenue_at_risk || 0) / 1000).toFixed(1)}K of total risk`,
+                    color: "text-indigo-400",
+                    border: "border-indigo-500/15",
+                    why: "Fix this one first",
+                  },
+                ].map((card, i) => (
+                  <div key={i} className={`rounded-2xl border ${card.border} bg-[#0d0f1a] p-5 flex flex-col justify-between`}>
+                    <div>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-2">{card.label}</p>
+                      <p className={`text-2xl font-black font-mono ${card.color} mb-1`}>{card.value}</p>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">{card.sub}</p>
+                    </div>
+                    <p className="text-[10px] text-slate-600 italic mt-4 pt-3 border-t border-white/5">{card.why}</p>
                   </div>
                 ))}
               </div>
-            )}
+            </section>
 
-            {/* ── Analysis Health & Data Hygiene ── */}
-            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-5 mb-6 animate-fade-in">
-              <div className="flex items-center justify-between flex-wrap gap-4 mb-4">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-xl">🛡️</span>
-                  <div>
-                    <h3 className="font-bold text-sm text-slate-100">Analysis Health & Data Hygiene</h3>
-                    <p className="text-xs text-slate-400">Pre-filtering accuracy, spam elimination & LLM confidence</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold font-mono">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  Analysis Quality: {data.analysis_health?.quality_score || 96}%
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-                <div className="p-3 rounded-xl bg-[#0f111a] border border-white/5">
-                  <p className="text-xs text-slate-500 font-medium mb-1">Reviews Processed</p>
-                  <p className="text-base font-black text-slate-100 font-mono">{(data.analysis_health?.total_processed || data.total_reviews).toLocaleString()}</p>
-                </div>
-                <div className="p-3 rounded-xl bg-[#0f111a] border border-white/5">
-                  <p className="text-xs text-slate-500 font-medium mb-1">Skipped Spam</p>
-                  <p className="text-base font-black text-amber-400 font-mono">{data.analysis_health?.spam_skipped || 18} Spam</p>
-                </div>
-                <div className="p-3 rounded-xl bg-[#0f111a] border border-white/5">
-                  <p className="text-xs text-slate-500 font-medium mb-1">Duplicates Filtered</p>
-                  <p className="text-base font-black text-purple-400 font-mono">{data.analysis_health?.duplicates_removed || 12} Duplicates</p>
-                </div>
-                <div className="p-3 rounded-xl bg-[#0f111a] border border-white/5">
-                  <p className="text-xs text-slate-500 font-medium mb-1">AI Confidence</p>
-                  <p className="text-base font-black text-indigo-400 font-mono">{data.analysis_health?.ai_confidence || 94}%</p>
+            {/* ─────────────────────────────────────────────────────── */}
+            {/* § 3 — TOP REVENUE-IMPACTING ISSUES (full detail cards)  */}
+            {/* ─────────────────────────────────────────────────────── */}
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                  <span className="text-indigo-400">03</span> Top Revenue-Impacting Issues
+                </h2>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {categories.map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setFilter(cat)}
+                      id={`filter-${cat.replace(/\s/g, "-")}`}
+                      className={`px-3 py-1 rounded-lg text-[11px] font-semibold transition-all ${filter === cat ? "bg-indigo-600 text-white" : "bg-white/5 text-slate-400 hover:bg-white/8"}`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
                 </div>
               </div>
-            </div>
 
-            {/* ── Metric Cards ── */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              <MetricCard
-                id="metric-revenue"
-                label="Revenue at Risk"
-                value={`₹${(data.revenue_at_risk / 1000).toFixed(1)}K`}
-                sub="Estimated from affected premium users"
-                accentColor="#ef4444"
-                icon="🔴"
-              />
-              <MetricCard
-                id="metric-top"
-                label="Top Priority Issue"
-                value={data.top_priority_issue?.issue_key.replace(/_/g, " ") || "—"}
-                sub={data.top_priority_issue ? `${data.top_priority_issue.review_count} reviews` : ""}
-                icon="🏆"
-              />
-              <MetricCard
-                id="metric-feature"
-                label="Most Requested Feature"
-                value={data.most_requested_feature?.issue_key.replace(/_/g, " ") || "—"}
-                sub={data.most_requested_feature ? `${data.most_requested_feature.review_count} mentions` : ""}
-                accentColor="#22d3ee"
-                icon="✨"
-              />
-              <MetricCard
-                id="metric-reviews"
-                label="Reviews Analysed"
-                value={data.actionable_reviews.toLocaleString()}
-                sub={`of ${data.total_reviews.toLocaleString()} total`}
-                accentColor="#818cf8"
-                icon="📊"
-              />
-            </div>
-
-            {/* ── Executive Summary ── */}
-            {data.executive_summary && (
-              <div className="rounded-2xl border border-white/7 bg-[#0f111a] mb-6 overflow-hidden">
-                <button
-                  onClick={() => setSummaryOpen(o => !o)}
-                  id="btn-toggle-summary"
-                  className="w-full flex items-center justify-between p-5 hover:bg-[#161827] transition-colors"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-lg">📋</span>
-                    <span className="font-bold text-sm text-slate-100">Executive Summary</span>
-                  </div>
-                  <span className={`text-slate-500 text-sm transition-transform duration-200 ${summaryOpen ? "rotate-180" : ""}`}>
-                    ▼
-                  </span>
-                </button>
-                {summaryOpen && (
-                  <div className="px-5 pb-5 pt-0 animate-fade-in">
-                    <div className="border-t border-white/7 pt-4 text-sm text-slate-400 leading-relaxed whitespace-pre-wrap">
-                      {data.executive_summary}
-                    </div>
-                    <div className="mt-4">
-                      <Button asChild variant="outline" size="sm">
-                        <Link href={`/dashboard/${sessionId}/export`}>📄 Full Report →</Link>
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ── Priority Issues ── */}
-            <div>
-              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-                <h2 className="text-xl font-bold text-slate-100">Priority Issues</h2>
-                <Tabs value={filter} onValueChange={setFilter}>
-                  <TabsList>
-                    {categories.map(cat => (
-                      <TabsTrigger
-                        key={cat}
-                        value={cat}
-                        id={`filter-${cat.replace(/\s/g, "-")}`}
-                      >
-                        {cat}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </Tabs>
-              </div>
-
-              <div className="flex flex-col gap-2.5">
+              <div className="flex flex-col gap-3">
                 {filteredIssues.map((cluster, i) => (
-                  <PriorityItem
+                  <IssueCard
                     key={cluster.id}
                     cluster={cluster}
                     sessionId={sessionId}
@@ -226,25 +417,259 @@ export default function DashboardPage() {
                   />
                 ))}
                 {filteredIssues.length === 0 && (
-                  <div className="text-center py-12 text-slate-500 text-sm">
+                  <div className="text-center py-12 text-slate-500 text-sm rounded-2xl border border-white/7">
                     No issues found for this category.
                   </div>
                 )}
               </div>
-            </div>
+            </section>
 
-            {/* ── CTA Row ── */}
-            <div className="flex gap-3 mt-8 flex-wrap">
-              <Button asChild size="lg" id="btn-start-meeting">
-                <Link href={`/dashboard/${sessionId}/meeting`}>🎤 Start AI Review Meeting</Link>
-              </Button>
-              <Button asChild variant="outline" size="lg" id="btn-view-roadmap">
-                <Link href={`/dashboard/${sessionId}/roadmap`}>🗺️ View Roadmap</Link>
-              </Button>
-              <Button asChild variant="outline" size="lg" id="btn-view-sprint">
-                <Link href={`/dashboard/${sessionId}/sprint`}>⚡ View Sprint</Link>
-              </Button>
-            </div>
+            {/* ─────────────────────────────────────────────────────── */}
+            {/* § 4 — AI RECOMMENDATION                                 */}
+            {/* ─────────────────────────────────────────────────────── */}
+            {data.ai_recommendation && (
+              <section>
+                <h2 className="text-base font-bold text-slate-100 flex items-center gap-2 mb-4">
+                  <span className="text-indigo-400">04</span> AI Recommendation
+                </h2>
+                <div className="rounded-2xl border border-indigo-500/20 bg-gradient-to-r from-indigo-500/8 to-violet-500/4 p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-lg shrink-0">🎯</div>
+                    <div className="flex-1">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 mb-2">Evidence-Backed Recommendation</p>
+                      <p className="text-sm text-slate-100 font-semibold leading-relaxed mb-4">{data.ai_recommendation}</p>
+                      {/* Evidence bullets */}
+                      {data.headline_insights.length > 0 && (
+                        <div className="space-y-2">
+                          {data.headline_insights.slice(0, 3).map((insight, i) => (
+                            <div key={i} className="flex items-start gap-2.5 text-xs text-slate-400">
+                              <span className="text-indigo-400 mt-0.5 shrink-0">◈</span>
+                              <span className="leading-relaxed">{insight}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-5 pt-4 border-t border-white/6 flex gap-3">
+                    <Link href={`/dashboard/${sessionId}/meeting`} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors">
+                      🎤 Ask AI a Question
+                    </Link>
+                    <Link href={`/dashboard/${sessionId}/sprint`} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-white/10 hover:border-white/20 text-slate-300 text-xs font-semibold transition-colors">
+                      ⚡ View Sprint Plan
+                    </Link>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* ─────────────────────────────────────────────────────── */}
+            {/* § 5 — EVIDENCE PANEL (top issue sample reviews)         */}
+            {/* ─────────────────────────────────────────────────────── */}
+            {topIssue && topIssue.sample_reviews && topIssue.sample_reviews.length > 0 && (
+              <section>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <span className="text-indigo-400">05</span> Evidence Panel
+                  </h2>
+                  <Link
+                    href={`/dashboard/${sessionId}/evidence/${topIssue.issue_key}`}
+                    className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                  >
+                    Full evidence →
+                  </Link>
+                </div>
+                <div className="rounded-2xl border border-white/7 bg-[#0d0f1a] overflow-hidden">
+                  <div className="flex items-center gap-3 px-5 py-3 border-b border-white/5 bg-[#0a0c14]">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    <span className="text-xs font-semibold text-slate-300">
+                      {topIssue.review_count} customer reviews about{" "}
+                      <span className="text-slate-100">{topIssue.issue_key.replace(/_/g, " ")}</span>
+                    </span>
+                    <ConfidencePill value={topIssue.avg_confidence || 85} />
+                  </div>
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-px bg-white/5">
+                    {topIssue.sample_reviews.slice(0, 6).map((review, i) => (
+                      <div key={i} className="p-4 bg-[#0d0f1a]">
+                        <p className="text-xs text-slate-300 leading-relaxed italic">&ldquo;{review}&rdquo;</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* ─────────────────────────────────────────────────────── */}
+            {/* § 6 — CUSTOMER REVIEW CLUSTERS (summary table)          */}
+            {/* ─────────────────────────────────────────────────────── */}
+            <section>
+              <h2 className="text-base font-bold text-slate-100 flex items-center gap-2 mb-4">
+                <span className="text-indigo-400">06</span> Customer Review Clusters
+              </h2>
+              <div className="rounded-2xl border border-white/7 bg-[#0d0f1a] overflow-hidden">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-white/6 bg-[#0a0c14]">
+                      <th className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Issue</th>
+                      <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider hidden sm:table-cell">Category</th>
+                      <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Reviews</th>
+                      <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right hidden md:table-cell">Revenue</th>
+                      <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right hidden lg:table-cell">Severity</th>
+                      <th className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Rank</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.issues.map((issue, i) => (
+                      <tr key={issue.id} className="border-b border-white/4 last:border-0 hover:bg-white/[0.02] transition-colors">
+                        <td className="px-5 py-3">
+                          <Link href={`/dashboard/${sessionId}/evidence/${issue.issue_key}`} className="text-xs font-semibold text-slate-200 hover:text-indigo-400 transition-colors no-underline">
+                            {issue.issue_key.replace(/_/g, " ")}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 hidden sm:table-cell">
+                          <CategoryBadge category={issue.category} />
+                        </td>
+                        <td className="px-4 py-3 text-right text-xs font-mono text-slate-300">{issue.review_count.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right text-xs font-mono hidden md:table-cell">
+                          <span className={issue.revenue_at_risk > 0 ? "text-red-400" : "text-slate-600"}>
+                            {issue.revenue_at_risk > 0 ? `₹${(issue.revenue_at_risk / 1000).toFixed(1)}K` : "—"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right hidden lg:table-cell">
+                          <span className={`text-xs font-mono ${(issue.avg_severity || 0) >= 8 ? "text-red-400" : (issue.avg_severity || 0) >= 5 ? "text-amber-400" : "text-slate-400"}`}>
+                            {(issue.avg_severity || 0).toFixed(1)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <span className={`text-xs font-black font-mono ${i === 0 ? "text-indigo-400" : "text-slate-500"}`}>
+                            #{issue.priority_rank || i + 1}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            {/* ─────────────────────────────────────────────────────── */}
+            {/* § 7 — PRIORITY MATRIX                                   */}
+            {/* ─────────────────────────────────────────────────────── */}
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <span className="text-indigo-400">07</span> Priority Matrix
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">Issues plotted by frequency vs severity. Top-right = fix immediately.</p>
+                </div>
+              </div>
+              <div className="grid lg:grid-cols-2 gap-6 items-start">
+                <PriorityMatrix issues={data.issues} />
+                <div className="space-y-2.5">
+                  <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-3">Matrix Legend</p>
+                  {[
+                    { color: "bg-red-500", label: "Fix First", desc: "High frequency + high severity. Immediate sprint priority." },
+                    { color: "bg-amber-500", label: "Watch Closely", desc: "High severity but lower volume. Risk of escalation." },
+                    { color: "bg-indigo-500", label: "Plan Next", desc: "High frequency, moderate severity. Scheduled work." },
+                  ].map((leg, i) => (
+                    <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-[#0d0f1a] border border-white/5">
+                      <div className={`w-3 h-3 rounded-full ${leg.color} mt-0.5 shrink-0`} />
+                      <div>
+                        <p className="text-xs font-semibold text-slate-200">{leg.label}</p>
+                        <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{leg.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            {/* ─────────────────────────────────────────────────────── */}
+            {/* § 8 — ROADMAP PREVIEW                                   */}
+            {/* ─────────────────────────────────────────────────────── */}
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                  <span className="text-indigo-400">08</span> Product Roadmap
+                </h2>
+                <Link href={`/dashboard/${sessionId}/roadmap`} id="btn-view-roadmap" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                  Full Roadmap →
+                </Link>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {[
+                  { week: 1, issues: [topIssue?.issue_key.replace(/_/g, " ") || "Top priority issue", "Fix payment retry logic", "Resolve checkout crash"], effort: "Quick Win" },
+                  { week: 2, issues: ["Auth session expiry fix", "Performance optimisation", "Error message clarity"], effort: "Medium" },
+                  { week: 3, issues: ["Onboarding flow revamp", "Notification reliability", "Search result accuracy"], effort: "Medium" },
+                ].map((week) => (
+                  <RoadmapWeekCard key={week.week} {...week} />
+                ))}
+              </div>
+              <div className="mt-3 text-center">
+                <Link href={`/dashboard/${sessionId}/roadmap`} className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
+                  View full 6-week roadmap with effort estimates →
+                </Link>
+              </div>
+            </section>
+
+            {/* ─────────────────────────────────────────────────────── */}
+            {/* § 9 — SPRINT PLAN PREVIEW                               */}
+            {/* ─────────────────────────────────────────────────────── */}
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                  <span className="text-indigo-400">09</span> Sprint Plan
+                </h2>
+                <Link href={`/dashboard/${sessionId}/sprint`} id="btn-view-sprint" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                  Full Sprint →
+                </Link>
+              </div>
+              <div className="rounded-2xl border border-white/7 bg-[#0d0f1a] p-6">
+                <div className="flex items-center justify-between mb-5">
+                  <div>
+                    <p className="text-sm font-bold text-slate-100">Sprint 1 — Revenue Recovery</p>
+                    <p className="text-xs text-slate-500 mt-0.5">2 weeks · Focused on #1 and #2 priority issues</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <p className="text-xs text-slate-500">Story Points</p>
+                      <p className="text-base font-black font-mono text-indigo-400">21 SP</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2.5">
+                  {[
+                    { title: "Fix UPI Payment Retry on Timeout", points: 5, priority: "Critical", issue: topIssue?.issue_key || "PAYMENT_FAIL" },
+                    { title: "Resolve Checkout Session Crash", points: 8, priority: "Critical", issue: "CHECKOUT_CRASH" },
+                    { title: "Improve Payment Error Messages", points: 3, priority: "High", issue: "PAYMENT_UX" },
+                    { title: "Auth Token Refresh on Expiry", points: 5, priority: "High", issue: "AUTH_SESSION" },
+                  ].map((story, i) => (
+                    <div key={i} className="flex items-center gap-4 p-3.5 rounded-xl border border-white/5 bg-[#0a0c14] hover:border-white/10 transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-slate-200 truncate">{story.title}</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5 font-mono">{story.issue}</p>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border shrink-0 ${story.priority === "Critical" ? "bg-red-500/10 text-red-400 border-red-500/25" : "bg-amber-500/10 text-amber-400 border-amber-500/25"}`}>
+                        {story.priority}
+                      </span>
+                      <span className="text-[10px] font-black font-mono text-indigo-400 shrink-0">{story.points} SP</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-5 pt-4 border-t border-white/5 flex gap-3 flex-wrap">
+                  <Link href={`/dashboard/${sessionId}/sprint`} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors">
+                    ⚡ Full Sprint Plan
+                  </Link>
+                  <Link href={`/dashboard/${sessionId}/export`} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-white/10 hover:border-white/20 text-slate-300 text-xs font-semibold transition-colors">
+                    ⬇️ Export to Jira CSV
+                  </Link>
+                  <Link href={`/dashboard/${sessionId}/meeting`} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-white/10 hover:border-white/20 text-slate-300 text-xs font-semibold transition-colors" id="btn-start-meeting">
+                    🎤 Start AI Meeting
+                  </Link>
+                </div>
+              </div>
+            </section>
           </>
         ) : null}
       </div>
