@@ -41,6 +41,13 @@ export interface DashboardData {
   headline_insights: string[];
   ai_recommendation: string;
   issues: IssueCluster[];
+  analysis_health?: {
+    quality_score: number;
+    total_processed: number;
+    spam_skipped: number;
+    duplicates_removed: number;
+    ai_confidence: number;
+  };
 }
 
 export interface EvidenceData {
