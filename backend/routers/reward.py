@@ -123,11 +123,11 @@ async def check_reward_eligibility(business_id: str, body: EligibilityCheckReque
     db = get_db()
 
     # 1. Fetch business & settings
-    biz = db.table("businesses").select("id,industry").eq("id", business_id).execute().data
-    if not biz:
+    biz_data = db.table("businesses").select("id,industry").eq("id", business_id).execute().data
+    if not biz_data or not isinstance(biz_data, list):
         raise HTTPException(status_code=404, detail="Business not found.")
 
-    industry = biz[0]["industry"]
+    industry = str(biz_data[0].get("industry", ""))
     settings = _get_or_create_settings(db, business_id, industry)
 
     mode = settings.get("feedback_mode") or _get_engagement_mode(industry)
@@ -228,13 +228,13 @@ async def get_user_reward_balance(
     # Count claimed rewards
     res = (
         db.table("feedback_rewards")
-        .select("id", count="exact")
+        .select("id")
         .eq("business_id", business_id)
         .eq("user_token", user_token)
         .eq("reward_status", "awarded")
         .execute()
     )
-    total_claimed = res.count or 0
+    total_claimed = len(res.data) if res.data else 0
 
     return UserBalanceResponse(
         business_id=business_id,

@@ -190,6 +190,7 @@ async def submit_feedback(business_id: str, body: FeedbackSubmitRequest):
     6. Return mode-specific engagement success response with points balance & cooldown status
     """
     from routers.reward import calculate_user_balance, check_cooldown_status
+    from services.abuse_detector import is_rate_limited, is_duplicate_text
 
     db = get_db()
 
@@ -221,6 +222,13 @@ async def submit_feedback(business_id: str, body: FeedbackSubmitRequest):
     # Anonymous user token handling
     user_token = body.user_token.strip() if body.user_token else str(uuid.uuid4())
 
+    # ── Rate Limiting Protection ──────────────────────────────────────────────
+    if is_rate_limited(user_token):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests. Please wait a few seconds before submitting feedback again."
+        )
+
     # ── Minimum length validation ─────────────────────────────────────────────
     text = body.text.strip()
     if len(text) < min_length:
@@ -249,6 +257,9 @@ async def submit_feedback(business_id: str, body: FeedbackSubmitRequest):
             "submission_id": None,
         }
 
+    # Check for exact duplicate submission text from same token
+    is_duplicate_submission = is_duplicate_text(business_id, user_token, text)
+
     # ── Validate feedback tag ─────────────────────────────────────────────────
     feedback_tag = None
     if body.feedback_tag:
@@ -256,7 +267,7 @@ async def submit_feedback(business_id: str, body: FeedbackSubmitRequest):
         if tag in VALID_FEEDBACK_TAGS:
             feedback_tag = tag
 
-    # ── Store submission ──────────────────────────────────────────────────────
+    # ── Store submission (Legitimate feedback is ALWAYS stored for AI analysis) ──
     submission_id = str(uuid.uuid4())
 
     submission_row = {
@@ -296,11 +307,12 @@ async def submit_feedback(business_id: str, body: FeedbackSubmitRequest):
             db, business_id, user_token, cooldown_hours
         )
 
-        if in_cooldown and next_eligible_at:
+        if is_duplicate_submission or (in_cooldown and next_eligible_at):
             reward_status = "cooldown_skipped"
             points_earned = 0
             reward_eligible = False
-            next_reward_at = next_eligible_at.isoformat()
+            if next_eligible_at:
+                next_reward_at = next_eligible_at.isoformat()
         else:
             reward_status = "awarded"
             points_earned = points_per_feedback

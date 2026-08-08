@@ -12,6 +12,7 @@ Requirements Tested:
 import pytest
 from unittest.mock import patch, MagicMock
 from datetime import datetime, timezone, timedelta
+from services.abuse_detector import reset_rate_limit
 
 
 # ── Test 1: First valid feedback in reward mode → reward awarded ─────────────
@@ -19,6 +20,9 @@ from datetime import datetime, timezone, timedelta
 def test_first_valid_feedback_awards_reward(mock_get_db, api_client):
     mock_db = MagicMock()
     mock_get_db.return_value = mock_db
+
+    token = "usr-anon-test-1"
+    reset_rate_limit(token)
 
     # Business query, Settings query, Cooldown check query, Balance sum query
     mock_db.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
@@ -46,7 +50,7 @@ def test_first_valid_feedback_awards_reward(mock_get_db, api_client):
         json={
             "text": "The grocery checkout experience was super smooth and fast today!",
             "rating": 5,
-            "user_token": "usr-anon-test-1",
+            "user_token": token,
         }
     )
 
@@ -65,8 +69,11 @@ def test_second_feedback_during_cooldown_skips_reward(mock_get_db, api_client):
     mock_db = MagicMock()
     mock_get_db.return_value = mock_db
 
+    token = "usr-anon-test-2"
+    reset_rate_limit(token)
+
     now = datetime.now(timezone.utc)
-    recent_award_time = (now - timedelta(hours=2)).isoformat()  # Awarded 2 hours ago (cooldown is 168h)
+    recent_award_time = (now - timedelta(hours=1)).isoformat()  # Awarded 1 hour ago (cooldown is 168h)
 
     mock_db.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
         MagicMock(data=[{"id": "biz-reward-1", "business_name": "FreshMart", "industry": "Supermarket"}]),
@@ -95,7 +102,7 @@ def test_second_feedback_during_cooldown_skips_reward(mock_get_db, api_client):
         json={
             "text": "Second submission on same day. Loved the clean aisles!",
             "rating": 5,
-            "user_token": "usr-anon-test-1",
+            "user_token": token,
         }
     )
 
@@ -113,6 +120,9 @@ def test_empty_feedback_rejected(mock_get_db, api_client):
     mock_db = MagicMock()
     mock_get_db.return_value = mock_db
 
+    token = "usr-anon-test-3"
+    reset_rate_limit(token)
+
     mock_db.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
         MagicMock(data=[{"id": "biz-1", "business_name": "FreshMart", "industry": "Supermarket"}]),
         MagicMock(data=[{"id": "s-1", "business_id": "biz-1", "minimum_feedback_length": 10}]),
@@ -120,7 +130,7 @@ def test_empty_feedback_rejected(mock_get_db, api_client):
 
     res = api_client.post(
         "/feedback/biz-1",
-        json={"text": "   ", "rating": 5, "user_token": "usr-anon-1"}
+        json={"text": "   ", "rating": 5, "user_token": token}
     )
     assert res.status_code in (400, 422)
 
@@ -131,6 +141,9 @@ def test_short_feedback_rejected_based_on_settings(mock_get_db, api_client):
     mock_db = MagicMock()
     mock_get_db.return_value = mock_db
 
+    token = "usr-anon-test-4"
+    reset_rate_limit(token)
+
     mock_db.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
         MagicMock(data=[{"id": "biz-1", "business_name": "FreshMart", "industry": "Supermarket"}]),
         MagicMock(data=[{"id": "s-1", "business_id": "biz-1", "minimum_feedback_length": 25}]),
@@ -138,7 +151,7 @@ def test_short_feedback_rejected_based_on_settings(mock_get_db, api_client):
 
     res = api_client.post(
         "/feedback/biz-1",
-        json={"text": "Good store", "rating": 5, "user_token": "usr-anon-1"}  # 10 chars, below 25
+        json={"text": "Good store", "rating": 5, "user_token": token}  # 10 chars, below 25
     )
     assert res.status_code == 400
     assert "at least 25 characters" in res.json()["detail"]
@@ -149,6 +162,9 @@ def test_short_feedback_rejected_based_on_settings(mock_get_db, api_client):
 def test_different_businesses_have_independent_cooldowns(mock_get_db, api_client):
     mock_db = MagicMock()
     mock_get_db.return_value = mock_db
+
+    token = "usr-anon-test-5"
+    reset_rate_limit(token)
 
     # Query for Business B (which user has never submitted to before)
     mock_db.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
@@ -175,7 +191,7 @@ def test_different_businesses_have_independent_cooldowns(mock_get_db, api_client
         json={
             "text": "The fresh pastries at Bakery B were incredible!",
             "rating": 5,
-            "user_token": "usr-anon-test-1",  # Same user token, different business!
+            "user_token": token,
         }
     )
 
@@ -190,6 +206,9 @@ def test_different_businesses_have_independent_cooldowns(mock_get_db, api_client
 def test_improvement_mode_gives_no_reward(mock_get_db, api_client):
     mock_db = MagicMock()
     mock_get_db.return_value = mock_db
+
+    token = "usr-anon-test-6"
+    reset_rate_limit(token)
 
     mock_db.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
         MagicMock(data=[{"id": "biz-hosp", "business_name": "City Hospital", "industry": "Hospital"}]),
@@ -208,7 +227,7 @@ def test_improvement_mode_gives_no_reward(mock_get_db, api_client):
         json={
             "text": "Doctor and nursing staff were very caring and professional.",
             "rating": 5,
-            "user_token": "usr-anon-test-1",
+            "user_token": token,
         }
     )
 
@@ -224,6 +243,9 @@ def test_improvement_mode_gives_no_reward(mock_get_db, api_client):
 def test_product_mode_gives_no_reward(mock_get_db, api_client):
     mock_db = MagicMock()
     mock_get_db.return_value = mock_db
+
+    token = "usr-anon-test-7"
+    reset_rate_limit(token)
 
     mock_db.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
         MagicMock(data=[{"id": "biz-saas", "business_name": "SaaS Platform", "industry": "SaaS"}]),
@@ -243,7 +265,7 @@ def test_product_mode_gives_no_reward(mock_get_db, api_client):
             "text": "Would love an automated CSV export option for weekly reports.",
             "rating": 4,
             "feedback_tag": "Feature Request",
-            "user_token": "usr-anon-test-1",
+            "user_token": token,
         }
     )
 
