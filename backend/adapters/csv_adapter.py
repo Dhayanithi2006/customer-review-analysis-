@@ -27,7 +27,7 @@ class CSVAdapter(BaseReviewAdapter):
     def __init__(self):
         super().__init__(source_name="CSV")
 
-    def _detect_column(self, headers: List[str], keywords: set, exclude: set = None) -> Optional[str]:
+    def _detect_column(self, headers: List[str], keywords: set, exclude: Optional[set] = None) -> Optional[str]:
         exclude = exclude or set()
         for h in headers:
             if h in exclude:
@@ -100,7 +100,7 @@ class CSVAdapter(BaseReviewAdapter):
         logger.info(f"Parsed {len(reviews)} reviews from CSV (session_id={session_id})")
         return reviews, detected_map
 
-    async def fetch_reviews(self, session_id: str, content: bytes = None, **kwargs) -> List[UnifiedReview]:
+    async def fetch_reviews(self, session_id: str, content: Optional[bytes] = None, **kwargs) -> List[UnifiedReview]:
         if not content:
             raise IngestionError("CSV adapter requires 'content' bytes parameter", source="CSV")
         reviews, _ = await self.parse_bytes(content, session_id)

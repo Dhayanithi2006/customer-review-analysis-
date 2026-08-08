@@ -24,21 +24,26 @@ def run(session_id: str) -> dict:
         .data
     )
 
-    if not clusters:
+    clusters_list = [dict(c) for c in clusters if isinstance(c, dict)] if isinstance(clusters, list) else []
+    if not clusters_list:
         return {"ranked": 0}
 
-    total_reviews = sum(c["review_count"] for c in clusters)
-    total_premium = sum(c["premium_user_count"] for c in clusters)
+    total_reviews = sum(int(c.get("review_count") or 0) for c in clusters_list)
+    total_premium = sum(int(c.get("premium_user_count") or 0) for c in clusters_list)
 
     scored = []
-    for c in clusters:
-        freq_norm     = c["review_count"] / max(total_reviews, 1)
-        severity_norm = (c["avg_severity"] or 5) / 10.0
-        premium_ratio = c["premium_user_count"] / max(c["review_count"], 1)
+    for c in clusters_list:
+        rev_cnt = int(c.get("review_count") or 0)
+        prem_cnt = int(c.get("premium_user_count") or 0)
+        avg_sev = float(c.get("avg_severity") or 5)
+
+        freq_norm     = rev_cnt / max(total_reviews, 1)
+        severity_norm = avg_sev / 10.0
+        premium_ratio = prem_cnt / max(rev_cnt, 1)
         tier_norm     = 0.2 + (0.8 * premium_ratio)
 
         if total_premium > 0:
-            revenue_norm = c["premium_user_count"] / max(total_premium, 1)
+            revenue_norm = prem_cnt / max(total_premium, 1)
         else:
             revenue_norm = severity_norm
 
@@ -48,11 +53,11 @@ def run(session_id: str) -> dict:
         tier_part  = tier_norm     * WEIGHT_TIER
 
         score = rev_part + reach_part + sev_part + tier_part
-        revenue_at_risk = c["premium_user_count"] * AVG_REVENUE_PER_USER
+        revenue_at_risk = prem_cnt * AVG_REVENUE_PER_USER
 
         scored.append({
-            "id":             c["id"],
-            "issue_key":      c["issue_key"],
+            "id":             c.get("id"),
+            "issue_key":      c.get("issue_key"),
             "priority_score": round(score, 4),
             "revenue_at_risk": round(revenue_at_risk, 2),
         })

@@ -65,8 +65,8 @@ def run(session_id: str) -> dict:
     for batch_idx, batch in enumerate(batches):
         # Build numbered review list for the prompt
         reviews_for_prompt = [
-            {"index": i, "text": r["cleaned_text"]}
-            for i, r in enumerate(batch)
+            {"index": i, "text": str(dict(r).get("cleaned_text") or "")}
+            for i, r in enumerate(batch) if isinstance(r, dict)
         ]
         prompt = PROMPT_TEMPLATE.format(
             count=len(batch),
@@ -82,9 +82,9 @@ def run(session_id: str) -> dict:
 
             # Persist each valid categorization
             for cat in validated:
-                review = batch[cat.review_index]
+                review = dict(batch[cat.review_index]) if (cat.review_index < len(batch) and isinstance(batch[cat.review_index], dict)) else {}
                 db.table("categorizations").insert({
-                    "review_id":     review["id"],
+                    "review_id":     review.get("id"),
                     "session_id":    session_id,
                     "issue_key":     cat.issue_key,
                     "category":      cat.category,

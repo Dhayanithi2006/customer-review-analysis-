@@ -50,11 +50,11 @@ def _set_actionable_count(db, session_id: str):
 def run_pipeline(session_id: str):
     db = get_db()
 
-    # Check current step — allows resume if re-triggered
     session = db.table("sessions").select("current_step,status").eq("id", session_id).single().execute().data
-    start_from = session.get("current_step", 0)
+    session_data = dict(session) if (session and isinstance(session, dict)) else {}
+    start_from = session_data.get("current_step", 0)
 
-    if session.get("status") == "complete":
+    if session_data.get("status") == "complete":
         return  # Already done
 
     try:

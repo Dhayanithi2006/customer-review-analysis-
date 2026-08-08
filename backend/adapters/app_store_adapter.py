@@ -24,7 +24,7 @@ class AppStoreAdapter(BaseReviewAdapter):
     async def fetch_reviews(
         self,
         session_id: str,
-        app_id: str = None,
+        app_id: Optional[str] = None,
         country: str = "us",
         page: int = 1,
         **kwargs

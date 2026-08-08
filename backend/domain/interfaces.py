@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from domain.schemas import UnifiedReview, CleanedReview, CategorizedReview, IssueCluster, PriorityResult
 
 class IReviewAdapter(ABC):
@@ -33,7 +33,7 @@ class IVaderService(ABC):
     """Abstract interface for VADER sentiment analysis & LLM routing."""
     
     @abstractmethod
-    def analyze_sentiment(self, text: str, rating: int = None) -> Tuple[float, str, bool]:
+    def analyze_sentiment(self, text: str, rating: Optional[int] = None) -> Tuple[float, str, bool]:
         """Returns (compound_score, sentiment_label, routed_to_llm)."""
         pass
 

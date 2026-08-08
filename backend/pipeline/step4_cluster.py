@@ -24,7 +24,11 @@ def run(session_id: str) -> dict:
         return {"clusters": 0}
 
     # Fetch review data we need (sentiment, rating, source, text)
-    review_ids = list({c["review_id"] for c in cats})
+    if isinstance(cats, list):
+        review_ids = list({str(dict(c).get("review_id")) for c in cats if isinstance(c, dict) and dict(c).get("review_id")})
+    else:
+        review_ids = []
+
     # Supabase in() filter
     reviews_data = (
         db.table("reviews")
@@ -33,7 +37,7 @@ def run(session_id: str) -> dict:
         .execute()
         .data
     )
-    review_map = {r["id"]: r for r in reviews_data}
+    review_map = {str(dict(r).get("id")): dict(r) for r in (reviews_data or []) if isinstance(r, dict)}
 
     # Group by issue_key
     clusters: dict[str, dict] = defaultdict(lambda: {
@@ -49,29 +53,33 @@ def run(session_id: str) -> dict:
         "premium_count": 0,
     })
 
-    for cat in cats:
-        key = cat["issue_key"]
-        c   = clusters[key]
-        c["category"]     = c["category"] or cat["category"]
-        c["business_area"] = c["business_area"] or cat["business_area"]
-        c["description"]  = c["description"] or cat["summary"]
+    if isinstance(cats, list):
+        for cat in cats:
+            if not isinstance(cat, dict):
+                continue
+            c_dict = dict(cat)
+            key = str(c_dict.get("issue_key", ""))
+            c = clusters[key]
+            c["category"]     = c["category"] or c_dict.get("category", "")
+            c["business_area"] = c["business_area"] or c_dict.get("business_area", "")
+            c["description"]  = c["description"] or c_dict.get("summary", "")
 
-        c["severities"].append(cat["severity"] or 5)
-        c["confidences"].append(cat["confidence"] or 50)
+            c["severities"].append(c_dict.get("severity") or 5)
+            c["confidences"].append(c_dict.get("confidence") or 50)
 
-        review = review_map.get(cat["review_id"], {})
-        sentiment = review.get("sentiment_score") or 0
-        rating    = review.get("rating")
-        source    = review.get("source", "unknown")
-        text      = review.get("cleaned_text", "")
+            review = dict(review_map.get(str(c_dict.get("review_id")), {}))
+            sentiment = review.get("sentiment_score") or 0
+            rating    = review.get("rating")
+            source    = review.get("source", "unknown")
+            text      = review.get("cleaned_text", "")
 
-        c["sentiments"].append(sentiment)
-        c["ratings"].append(rating)
-        c["platforms"].add(source)
+            c["sentiments"].append(sentiment)
+            c["ratings"].append(rating)
+            c["platforms"].add(source)
 
-        # Premium user proxy: gave a low rating (1-3) or strong negative sentiment
-        if (rating and rating <= 3) or sentiment < -0.5:
-            c["premium_count"] += 1
+            # Premium user proxy: gave a low rating (1-3) or strong negative sentiment
+            if (rating and rating <= 3) or sentiment < -0.5:
+                c["premium_count"] += 1
 
         # Keep top 5 sample texts (most severe first — sort later)
         if len(c["sample_texts"]) < 5 and text:

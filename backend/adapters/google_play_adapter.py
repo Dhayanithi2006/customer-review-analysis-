@@ -24,7 +24,7 @@ class GooglePlayAdapter(BaseReviewAdapter):
     async def fetch_reviews(
         self,
         session_id: str,
-        app_id: str = None,
+        app_id: Optional[str] = None,
         count: int = 200,
         lang: str = "en",
         country: str = "us",

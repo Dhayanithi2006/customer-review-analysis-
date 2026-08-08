@@ -36,32 +36,36 @@ def run(session_id: str) -> dict:
 
     stats = {"positive": 0, "negative": 0, "neutral": 0, "routed": 0}
 
-    for row in rows:
-        text   = row["cleaned_text"] or ""
-        rating = row.get("rating")
-        scores = _analyzer.polarity_scores(text)
-        compound = scores["compound"]
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            r_dict = dict(row)
+            text = str(r_dict.get("cleaned_text") or "")
+            rating = r_dict.get("rating")
+            scores = _analyzer.polarity_scores(text)
+            compound = float(scores["compound"])
 
-        if compound > 0.35:
-            label = "positive"
-            # Route positive only if it looks like a feature request
-            route = _is_feature_request(text)
-        elif compound < -0.05:
-            label = "negative"
-            route = True
-        else:
-            label = "neutral"
-            # Neutral + low rating still actionable
-            route = bool(rating and rating <= 3)
+            if compound > 0.35:
+                label = "positive"
+                # Route positive only if it looks like a feature request
+                route = _is_feature_request(text)
+            elif compound < -0.05:
+                label = "negative"
+                route = True
+            else:
+                label = "neutral"
+                # Neutral + low rating still actionable
+                route = bool(rating and rating <= 3)
 
-        stats[label] += 1
-        if route:
-            stats["routed"] += 1
+            stats[label] += 1
+            if route:
+                stats["routed"] += 1
 
-        db.table("reviews").update({
-            "sentiment_score": compound,
-            "sentiment_label": label,
-            "routed_to_llm": route,
-        }).eq("id", row["id"]).execute()
+            db.table("reviews").update({
+                "sentiment_score": compound,
+                "sentiment_label": label,
+                "routed_to_llm": route,
+            }).eq("id", r_dict.get("id")).execute()
 
     return stats
