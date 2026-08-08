@@ -1,7 +1,7 @@
 """
-Feedback Router — Public Feedback Submission Endpoint
-GET  /feedback/{business_id}  → Returns public form config (business name, engagement mode, industry)
-POST /feedback/{business_id}  → Accepts a single review from the public form
+Feedback Router — Public Feedback Submission Endpoint (Phase 2)
+GET  /feedback/{business_id}  → Returns public form config (dynamic per mode & settings)
+POST /feedback/{business_id}  → Accepts a single review from the public form with validation
 
 Architecture:
   Phone/Browser → GET /feedback/{id} (to get form config)
@@ -9,10 +9,10 @@ Architecture:
   → Stored in feedback_submissions (buffer)
   → Migrated into reviews table when owner runs analysis
 
-Engagement Modes (derived from industry):
-  REWARD MODE      — Supermarket, Hotel, Restaurant, E-commerce, Hostel
-  IMPROVEMENT MODE — Hospital, School, Bank
-  PRODUCT MODE     — Mobile App, SaaS
+Engagement Modes:
+  REWARD MODE      — Points & incentives ("Thank you! You've earned 10 points.")
+  IMPROVEMENT MODE — Formal/Institutional ("Thank you for sharing your experience.")
+  PRODUCT MODE     — Feature/roadmap ("Feedback received. Your feedback can help shape future product improvements.")
 """
 import uuid
 from typing import Optional
@@ -21,33 +21,20 @@ from pydantic import BaseModel, Field
 from database import get_db
 from core.logging import get_logger
 from services.spam_detector import is_spam
+from routers.feedback_settings import _get_or_create_settings, _get_engagement_mode
 
 logger = get_logger("routers.feedback")
 
 router = APIRouter(prefix="/feedback", tags=["Feedback"])
 
-# ── Engagement Mode Classification ───────────────────────────────────────────
-
-REWARD_INDUSTRIES = {"Supermarket", "Hotel", "Restaurant", "E-commerce", "Hostel"}
-IMPROVEMENT_INDUSTRIES = {"Hospital", "School", "Bank"}
-PRODUCT_INDUSTRIES = {"Mobile App", "SaaS"}
-
 VALID_FEEDBACK_TAGS = {"Bug", "Feature Request", "Performance", "UX", "Praise", "Other"}
-
-def _get_engagement_mode(industry: str) -> str:
-    """Derive engagement mode from industry. Pure function, no DB."""
-    if industry in REWARD_INDUSTRIES:
-        return "reward"
-    if industry in IMPROVEMENT_INDUSTRIES:
-        return "improvement"
-    return "product"  # Default: Mobile App, SaaS, and anything else
 
 
 # ── Request / Response Schemas ───────────────────────────────────────────────
 
 class FeedbackSubmitRequest(BaseModel):
-    text: str = Field(..., min_length=10, max_length=2000,
-                      description="Customer feedback text. Minimum 10 characters.")
+    text: str = Field(..., min_length=5, max_length=2000,
+                      description="Customer feedback text.")
     rating: Optional[int] = Field(default=None, ge=1, le=5)
     customer_name: Optional[str] = Field(default=None, max_length=80)
     customer_email: Optional[str] = Field(default=None, max_length=200)
@@ -76,36 +63,66 @@ class FeedbackFormConfig(BaseModel):
     show_reward_promise: bool
     show_tag_selector: bool    # Only for PRODUCT mode
     requires_rating: bool
+    minimum_feedback_length: int
+    points_per_feedback: int
+    reward_enabled: bool
+    reward_description: str
+    reward_threshold: int
 
 
-# ── Engagement mode copy (UI text) ───────────────────────────────────────────
+def _build_mode_dynamic_copy(settings: dict, business_name: str, industry: str) -> dict:
+    """
+    Constructs dynamic headlines, subtexts, and success messages based on mode and settings.
+    No internal AI terminology (VADER, Gemini, Decision Center) is ever exposed to the end customer.
+    """
+    mode = settings.get("feedback_mode") or _get_engagement_mode(industry)
+    reward_enabled = bool(settings.get("reward_enabled", False))
+    points = int(settings.get("points_per_feedback", 10))
+    min_len = int(settings.get("minimum_feedback_length", 10))
+    custom_msg = (settings.get("feedback_message") or "").strip()
+    reward_desc = (settings.get("reward_description") or "").strip()
 
-MODE_COPY = {
-    "reward": {
-        "headline": "Share your experience & earn loyalty points",
-        "subtext": "Takes less than a minute. Your honest feedback helps us serve you better.",
-        "success": "Thank you! Your loyalty points will be credited within 24 hours.",
-        "show_reward_promise": True,
-        "show_tag_selector": False,
-        "requires_rating": True,
-    },
-    "improvement": {
-        "headline": "Help us serve you better",
-        "subtext": "Your feedback is used to improve services. It is completely confidential.",
-        "success": "Your feedback has been recorded. Thank you for helping us improve.",
-        "show_reward_promise": False,
-        "show_tag_selector": False,
-        "requires_rating": True,
-    },
-    "product": {
-        "headline": "Shape the product roadmap",
-        "subtext": "Your feedback directly influences what our team builds next.",
-        "success": "Received. Your input influences our next product decisions — thank you.",
+    if mode == "reward":
+        headline = custom_msg if custom_msg else f"How was your experience at {business_name}?"
+        subtext = "Tell us what we can improve. Submit valid feedback to earn loyalty points."
+        success_msg = f"Thank you! You've earned {points} points. Your feedback helps us improve your experience."
+        return {
+            "mode": "reward",
+            "headline": headline,
+            "subtext": subtext,
+            "success": success_msg,
+            "show_reward_promise": reward_enabled,
+            "show_tag_selector": False,
+            "requires_rating": True,
+        }
+
+    if mode == "improvement":
+        headline = custom_msg if custom_msg else f"How was your experience today?"
+        subtext = "Tell us what we can improve. Your feedback is confidential and helps us improve service quality."
+        success_msg = "Thank you for sharing your experience. Your feedback helps us improve service quality."
+        return {
+            "mode": "improvement",
+            "headline": headline,
+            "subtext": subtext,
+            "success": success_msg,
+            "show_reward_promise": False,
+            "show_tag_selector": False,
+            "requires_rating": True,
+        }
+
+    # Product Mode
+    headline = custom_msg if custom_msg else "How was your experience?"
+    subtext = "What should we improve? Your feedback directly shapes future product improvements."
+    success_msg = "Feedback received. Your feedback can help shape future product improvements."
+    return {
+        "mode": "product",
+        "headline": headline,
+        "subtext": subtext,
+        "success": success_msg,
         "show_reward_promise": False,
         "show_tag_selector": True,
         "requires_rating": False,
-    },
-}
+    }
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -114,14 +131,14 @@ MODE_COPY = {
 async def get_feedback_form_config(business_id: str):
     """
     Public endpoint — no auth required.
-    Returns the form configuration for a business's feedback page.
-    Called by the QR code landing page to load the correct form variant.
+    Returns the dynamic form configuration for a business's feedback page.
+    Directly reflects business feedback_mode and settings from Phase 1.
     """
     db = get_db()
 
     biz = (
         db.table("businesses")
-        .select("id,business_name,industry,engagement_mode")
+        .select("id,business_name,industry")
         .eq("id", business_id)
         .execute()
         .data
@@ -135,22 +152,25 @@ async def get_feedback_form_config(business_id: str):
 
     row = biz[0]
     industry = row["industry"]
-
-    # Prefer explicitly stored mode, fall back to derived
-    mode = row.get("engagement_mode") or _get_engagement_mode(industry)
-    copy = MODE_COPY.get(mode, MODE_COPY["improvement"])
+    settings = _get_or_create_settings(db, business_id, industry)
+    copy = _build_mode_dynamic_copy(settings, row["business_name"], industry)
 
     return FeedbackFormConfig(
         business_id=row["id"],
         business_name=row["business_name"],
         industry=industry,
-        engagement_mode=mode,
+        engagement_mode=copy["mode"],
         mode_headline=copy["headline"],
         mode_subtext=copy["subtext"],
         mode_success_message=copy["success"],
         show_reward_promise=copy["show_reward_promise"],
         show_tag_selector=copy["show_tag_selector"],
         requires_rating=copy["requires_rating"],
+        minimum_feedback_length=int(settings.get("minimum_feedback_length", 10)),
+        points_per_feedback=int(settings.get("points_per_feedback", 10)),
+        reward_enabled=bool(settings.get("reward_enabled", False)),
+        reward_description=settings.get("reward_description", "") or "",
+        reward_threshold=int(settings.get("reward_threshold", 100)),
     )
 
 
@@ -161,21 +181,17 @@ async def submit_feedback(business_id: str, body: FeedbackSubmitRequest):
     Accepts a single feedback submission from the public form.
 
     Flow:
-    1. Validate business exists
-    2. Spam-check the text
-    3. Validate feedback_tag if provided
-    4. Store in feedback_submissions (buffer table)
-    5. Return success + engagement response
-
-    The submission is NOT immediately processed through the pipeline.
-    It enters the pipeline when the business owner clicks 'Run Analysis'.
+    1. Validate business exists & fetch settings
+    2. Check minimum length validation according to business settings
+    3. Spam-check the text
+    4. Store in feedback_submissions buffer table
+    5. Return mode-specific engagement success response
     """
     db = get_db()
 
-    # ── Validate business exists ──────────────────────────────────────────────
     biz = (
         db.table("businesses")
-        .select("id,business_name,industry,engagement_mode")
+        .select("id,business_name,industry")
         .eq("id", business_id)
         .execute()
         .data
@@ -189,17 +205,29 @@ async def submit_feedback(business_id: str, body: FeedbackSubmitRequest):
 
     row = biz[0]
     industry = row["industry"]
-    mode = row.get("engagement_mode") or _get_engagement_mode(industry)
+    settings = _get_or_create_settings(db, business_id, industry)
+    copy = _build_mode_dynamic_copy(settings, row["business_name"], industry)
+
+    mode = copy["mode"]
+    min_length = int(settings.get("minimum_feedback_length", 10))
+
+    # ── Minimum length validation ─────────────────────────────────────────────
+    text = body.text.strip()
+    if len(text) < min_length:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Feedback is too short. Please enter at least {min_length} characters."
+        )
 
     # ── Spam detection ────────────────────────────────────────────────────────
-    text = body.text.strip()
     if is_spam(text):
-        # Return 200 (not 400) to avoid revealing spam detection to bots
+        # Return 200 (silent reject) to prevent bot reverse engineering
         return {
             "success": True,
-            "message": MODE_COPY[mode]["success"],
+            "message": copy["success"],
             "engagement_mode": mode,
-            "submission_id": None,  # Silent reject
+            "points_earned": settings.get("points_per_feedback", 10) if mode == "reward" and settings.get("reward_enabled") else 0,
+            "submission_id": None,
         }
 
     # ── Validate feedback tag ─────────────────────────────────────────────────
@@ -208,7 +236,6 @@ async def submit_feedback(business_id: str, body: FeedbackSubmitRequest):
         tag = body.feedback_tag.strip()
         if tag in VALID_FEEDBACK_TAGS:
             feedback_tag = tag
-        # If invalid tag, silently ignore it (don't reject the whole submission)
 
     # ── Store submission ──────────────────────────────────────────────────────
     submission_id = str(uuid.uuid4())
@@ -238,12 +265,15 @@ async def submit_feedback(business_id: str, body: FeedbackSubmitRequest):
         logger.error(f"Failed to store feedback submission: {e}")
         raise HTTPException(status_code=500, detail="Failed to record feedback. Please try again.")
 
+    points = int(settings.get("points_per_feedback", 10)) if mode == "reward" and settings.get("reward_enabled") else 0
+
     return {
         "success":         True,
-        "message":         MODE_COPY[mode]["success"],
+        "message":         copy["success"],
         "engagement_mode": mode,
         "submission_id":   submission_id,
-        "show_reward":     mode == "reward",
+        "points_earned":   points,
+        "show_reward":     mode == "reward" and bool(settings.get("reward_enabled")),
     }
 
 
@@ -259,7 +289,6 @@ async def get_pending_submissions(business_id: str):
     if not biz:
         raise HTTPException(status_code=404, detail="Business not found.")
 
-    # Count unprocessed (session_id IS NULL)
     total_result = (
         db.table("feedback_submissions")
         .select("id", count="exact")
@@ -269,7 +298,6 @@ async def get_pending_submissions(business_id: str):
     )
     total_pending = total_result.count or 0
 
-    # Recent samples
     samples = (
         db.table("feedback_submissions")
         .select("id,raw_text,rating,engagement_mode,feedback_tag,submitted_at")
@@ -281,7 +309,6 @@ async def get_pending_submissions(business_id: str):
         .data
     )
 
-    # Also count all-time
     all_time = (
         db.table("feedback_submissions")
         .select("id", count="exact")
@@ -309,28 +336,16 @@ async def process_submissions_into_pipeline(business_id: str):
     """
     Workspace-facing endpoint — migrates pending feedback_submissions
     into the reviews table and fires the analysis pipeline.
-
-    Called when the business owner clicks 'Run Analysis' on their workspace.
-
-    Flow:
-    1. Fetch all unprocessed submissions for this business
-    2. Create a new session (source='qr_form')
-    3. Insert each submission as a review row
-    4. Create an analysis_version record
-    5. Fire the pipeline
-    6. Mark submissions as processed (set session_id)
     """
     from pipeline.orchestrator import run_pipeline
     import asyncio
 
     db = get_db()
 
-    # ── Validate business ─────────────────────────────────────────────────────
     biz = db.table("businesses").select("id,business_name,industry").eq("id", business_id).execute().data
     if not biz:
         raise HTTPException(status_code=404, detail="Business not found.")
 
-    # ── Fetch pending submissions ─────────────────────────────────────────────
     pending = (
         db.table("feedback_submissions")
         .select("id,raw_text,rating,submitted_at,engagement_mode")
@@ -355,7 +370,6 @@ async def process_submissions_into_pipeline(business_id: str):
             "session_id": None,
         }
 
-    # ── Create analysis session ───────────────────────────────────────────────
     session_id = str(uuid.uuid4())
 
     db.table("sessions").insert({
@@ -368,7 +382,6 @@ async def process_submissions_into_pipeline(business_id: str):
         "business_id":   business_id,
     }).execute()
 
-    # ── Insert reviews ────────────────────────────────────────────────────────
     review_rows = []
     for sub in pending:
         review_rows.append({
@@ -383,7 +396,6 @@ async def process_submissions_into_pipeline(business_id: str):
     for i in range(0, len(review_rows), 500):
         db.table("reviews").insert(review_rows[i:i+500]).execute()
 
-    # ── Create analysis version ───────────────────────────────────────────────
     try:
         existing = (
             db.table("analysis_versions")
@@ -403,17 +415,14 @@ async def process_submissions_into_pipeline(business_id: str):
             "status":      "pending",
         }).execute()
     except Exception:
-        pass  # Non-fatal
+        pass
 
-    # ── Mark submissions as processed ─────────────────────────────────────────
     sub_ids = [s["id"] for s in pending]
     for i in range(0, len(sub_ids), 100):
         db.table("feedback_submissions").update({
             "session_id": session_id
         }).in_("id", sub_ids[i:i+100]).execute()
 
-    # ── Fire pipeline ─────────────────────────────────────────────────────────
-    # Run as background task using asyncio
     loop = asyncio.get_event_loop()
     loop.run_in_executor(None, run_pipeline, session_id)
 
@@ -423,10 +432,10 @@ async def process_submissions_into_pipeline(business_id: str):
     )
 
     return {
-        "success":     True,
-        "session_id":  session_id,
+        "success":         True,
+        "session_id":      session_id,
         "total_processed": len(pending),
-        "message": f"Processing {len(pending)} submissions. Analysis will be ready shortly.",
-        "status_url":    f"/pipeline/{session_id}/status",
-        "workspace_url": f"/business/{business_id}/analysis",
+        "message":        f"Processing {len(pending)} submissions. Analysis will be ready shortly.",
+        "status_url":      f"/pipeline/{session_id}/status",
+        "workspace_url":   f"/business/{business_id}/analysis",
     }

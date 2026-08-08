@@ -27,6 +27,15 @@ IMPROVEMENT_INDUSTRIES = {"Hospital", "School", "University", "Bank", "Clinic", 
 PRODUCT_INDUSTRIES = {"Mobile App", "SaaS"}
 
 
+def _get_engagement_mode(industry: str) -> str:
+    """Derive default engagement mode from industry."""
+    if industry in REWARD_INDUSTRIES:
+        return "reward"
+    if industry in IMPROVEMENT_INDUSTRIES:
+        return "improvement"
+    return "product"
+
+
 def _build_defaults(industry: str) -> dict:
     """
     Returns a dictionary of default settings for a given industry.

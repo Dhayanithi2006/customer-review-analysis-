@@ -192,3 +192,86 @@ def test_patch_feedback_settings_improvement_mode_reward_conflict(mock_get_db, a
     )
     assert res.status_code == 422
     assert "Improvement mode is designed for institutional settings" in res.json()["detail"]
+
+
+# ── Test 4: Dynamic Customer Feedback Form Config (Phase 2) ───────────────────
+@patch("routers.feedback.get_db")
+def test_public_feedback_form_config_reward_mode(mock_get_db, api_client):
+    mock_db = MagicMock()
+    mock_get_db.return_value = mock_db
+
+    # business check + settings check
+    mock_db.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
+        MagicMock(data=[{"id": "biz-super", "business_name": "FreshMart", "industry": "Supermarket"}]),
+        MagicMock(data=[{
+            "id": "s-1",
+            "business_id": "biz-super",
+            "feedback_mode": "reward",
+            "reward_enabled": True,
+            "points_per_feedback": 10,
+            "minimum_feedback_length": 10,
+            "feedback_message": "How was your shopping experience?",
+        }]),
+    ]
+
+    res = api_client.get("/feedback/biz-super")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["business_name"] == "FreshMart"
+    assert data["engagement_mode"] == "reward"
+    assert data["mode_headline"] == "How was your shopping experience?"
+    assert "earned 10 points" in data["mode_success_message"]
+    assert data["show_reward_promise"] is True
+    assert data["requires_rating"] is True
+
+
+@patch("routers.feedback.get_db")
+def test_public_feedback_form_config_improvement_mode(mock_get_db, api_client):
+    mock_db = MagicMock()
+    mock_get_db.return_value = mock_db
+
+    mock_db.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
+        MagicMock(data=[{"id": "biz-hosp", "business_name": "City Hospital", "industry": "Hospital"}]),
+        MagicMock(data=[{
+            "id": "s-2",
+            "business_id": "biz-hosp",
+            "feedback_mode": "improvement",
+            "reward_enabled": False,
+            "minimum_feedback_length": 20,
+            "feedback_message": "How was your experience today?",
+        }]),
+    ]
+
+    res = api_client.get("/feedback/biz-hosp")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["engagement_mode"] == "improvement"
+    assert data["mode_headline"] == "How was your experience today?"
+    assert "patient care" in data["mode_success_message"] or "service quality" in data["mode_success_message"]
+    assert data["show_reward_promise"] is False
+    assert "points" not in data["mode_success_message"].lower()
+
+
+@patch("routers.feedback.get_db")
+def test_public_feedback_submission_length_validation(mock_get_db, api_client):
+    mock_db = MagicMock()
+    mock_get_db.return_value = mock_db
+
+    mock_db.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
+        MagicMock(data=[{"id": "biz-hosp", "business_name": "City Hospital", "industry": "Hospital"}]),
+        MagicMock(data=[{
+            "id": "s-2",
+            "business_id": "biz-hosp",
+            "feedback_mode": "improvement",
+            "minimum_feedback_length": 20,
+        }]),
+    ]
+
+    # Submit feedback with only 12 characters (below min length 20)
+    res = api_client.post(
+        "/feedback/biz-hosp",
+        json={"text": "Short input", "rating": 4}
+    )
+    assert res.status_code == 400
+    assert "at least 20 characters" in res.json()["detail"]
+

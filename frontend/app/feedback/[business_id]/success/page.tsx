@@ -1,51 +1,58 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useParams } from "next/navigation";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import { Suspense } from "react";
 
-const MODE_CONTENT = {
+const MODE_DEFAULTS = {
   reward: {
     icon: "🎁",
-    title: "Points Claimed!",
-    subtitle: "Thank you for your feedback",
-    description: "Your loyalty points will be credited to your account within 24 hours. We appreciate you taking the time to share your experience.",
+    title: "Thank You!",
+    badge: "Points Credited",
     color: "amber",
-    badge: "Loyalty Points Pending",
     badgeIcon: "⭐",
   },
   improvement: {
-    icon: "✅",
-    title: "Feedback Received",
-    subtitle: "Thank you for helping us improve",
-    description: "Your feedback has been recorded and will be reviewed by our team. It is completely confidential and used solely to improve the quality of our services.",
-    color: "cyan",
+    icon: "✓",
+    title: "Thank You",
     badge: "Feedback Logged",
+    color: "cyan",
     badgeIcon: "💬",
   },
   product: {
-    icon: "🚀",
-    title: "Feedback Sent!",
-    subtitle: "You're shaping the product",
-    description: "Your input has been received and will directly influence what our team builds next. Thank you for helping us make this product better.",
+    icon: "✓",
+    title: "Feedback Received",
+    badge: "Product Roadmap",
     color: "indigo",
-    badge: "Added to Roadmap Queue",
-    badgeIcon: "🗺️",
+    badgeIcon: "🚀",
   },
 } as const;
 
-type Mode = keyof typeof MODE_CONTENT;
+type Mode = keyof typeof MODE_DEFAULTS;
 
 function SuccessContent() {
-  const params     = useParams();
+  const params       = useParams();
   const searchParams = useSearchParams();
   const businessId   = params.business_id as string;
   const rawMode      = searchParams.get("mode") as Mode || "improvement";
-  const businessName = searchParams.get("biz") || "this business";
+  const businessName = searchParams.get("biz") || "the business";
+  const customMsg    = searchParams.get("msg");
+  const pts          = parseInt(searchParams.get("pts") || "0");
 
-  const mode    = (rawMode in MODE_CONTENT ? rawMode : "improvement") as Mode;
-  const content = MODE_CONTENT[mode];
+  const mode    = (rawMode in MODE_DEFAULTS ? rawMode : "improvement") as Mode;
+  const config  = MODE_DEFAULTS[mode];
+
+  // Formulate dynamic message matching Phase 2 specifications
+  let displayMessage = customMsg;
+  if (!displayMessage) {
+    if (mode === "reward") {
+      displayMessage = `You've earned ${pts > 0 ? pts : 10} points. Your feedback helps us improve your experience.`;
+    } else if (mode === "improvement") {
+      displayMessage = "Your feedback helps us improve patient care and service quality.";
+    } else {
+      displayMessage = "Your feedback can help shape future product improvements.";
+    }
+  }
 
   const colorMap: Record<string, string> = {
     amber:  "border-amber-500/25 bg-amber-500/8 text-amber-300",
@@ -61,52 +68,54 @@ function SuccessContent() {
 
   return (
     <div className="min-h-screen bg-[#07080d] flex items-center justify-center px-4 py-12 relative">
-      {/* Ambient */}
       <div className="fixed inset-0 pointer-events-none">
         <div className={`absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full blur-[100px] opacity-30 ${
-          content.color === "amber" ? "bg-amber-500/20" : content.color === "cyan" ? "bg-cyan-500/15" : "bg-indigo-500/20"
+          config.color === "amber" ? "bg-amber-500/20" : config.color === "cyan" ? "bg-cyan-500/15" : "bg-indigo-500/20"
         }`} />
       </div>
 
       <div className="relative z-10 w-full max-w-md text-center">
+        <div className={`bg-[#0d0f1a]/95 border border-white/10 rounded-3xl p-8 sm:p-10 backdrop-blur-xl ${glowMap[config.color]}`}>
 
-        {/* Success card */}
-        <div className={`bg-[#0d0f1a]/90 border border-white/8 rounded-3xl p-8 sm:p-10 backdrop-blur-xl ${glowMap[content.color]}`}>
-
-          {/* Icon with pulse animation */}
+          {/* Icon with subtle pulse animation */}
           <div className="relative inline-flex items-center justify-center mb-6">
-            <div className={`w-20 h-20 rounded-2xl flex items-center justify-center text-4xl ${
-              content.color === "amber" ? "bg-amber-500/15 border border-amber-500/30" :
-              content.color === "cyan"  ? "bg-cyan-500/15 border border-cyan-500/30" :
-                                          "bg-indigo-500/15 border border-indigo-500/30"
+            <div className={`w-20 h-20 rounded-2xl flex items-center justify-center text-4xl font-bold ${
+              config.color === "amber" ? "bg-amber-500/15 border border-amber-500/30 text-amber-400" :
+              config.color === "cyan"  ? "bg-cyan-500/15 border border-cyan-500/30 text-cyan-400" :
+                                          "bg-indigo-500/15 border border-indigo-500/30 text-indigo-400"
             }`}>
-              {content.icon}
+              {config.icon}
             </div>
-            {/* Animated ring */}
             <div className={`absolute inset-0 rounded-2xl border-2 animate-ping opacity-20 ${
-              content.color === "amber" ? "border-amber-400" : content.color === "cyan" ? "border-cyan-400" : "border-indigo-400"
+              config.color === "amber" ? "border-amber-400" : config.color === "cyan" ? "border-cyan-400" : "border-indigo-400"
             }`} />
           </div>
 
-          {/* Badge */}
-          <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[10px] font-bold mb-4 ${colorMap[content.color]}`}>
-            <span>{content.badgeIcon}</span>
-            {content.badge}
+          {/* Mode Badge */}
+          <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-bold mb-4 ${colorMap[config.color]}`}>
+            <span>{config.badgeIcon}</span>
+            {config.badge}
           </div>
 
-          <h1 className="text-2xl font-black text-slate-100 mb-2">{content.title}</h1>
-          <p className={`text-sm font-semibold mb-4 ${
-            content.color === "amber" ? "text-amber-400" : content.color === "cyan" ? "text-cyan-400" : "text-indigo-400"
-          }`}>{content.subtitle}</p>
-          <p className="text-sm text-slate-400 leading-relaxed mb-8">{content.description}</p>
+          <h1 className="text-2xl font-black text-slate-100 mb-3">{config.title}</h1>
 
-          {/* Actions */}
+          {/* Points Highlight (REWARD MODE ONLY) */}
+          {mode === "reward" && pts > 0 && (
+            <div className="my-3 py-2 px-4 rounded-xl bg-amber-500/10 border border-amber-500/20 inline-block">
+              <p className="text-lg font-black text-amber-400">+{pts} Loyalty Points Earned!</p>
+            </div>
+          )}
+
+          <p className="text-sm text-slate-300 leading-relaxed mb-8 font-medium">
+            {displayMessage}
+          </p>
+
           <div className="flex flex-col gap-3">
             <Link
               href={`/feedback/${businessId}`}
               className={`w-full py-3.5 rounded-2xl text-sm font-bold transition-all text-center no-underline ${
-                content.color === "amber" ? "bg-amber-500 hover:bg-amber-400 text-black" :
-                content.color === "cyan"  ? "bg-cyan-600 hover:bg-cyan-500 text-white" :
+                config.color === "amber" ? "bg-amber-500 hover:bg-amber-400 text-black" :
+                config.color === "cyan"  ? "bg-cyan-600 hover:bg-cyan-500 text-white" :
                                             "bg-indigo-600 hover:bg-indigo-500 text-white"
               }`}
             >
@@ -115,10 +124,8 @@ function SuccessContent() {
           </div>
         </div>
 
-        {/* Footer */}
-        <p className="text-center text-[10px] text-slate-700 mt-6">
-          Feedback collected by <span className="text-slate-500 font-semibold">{decodeURIComponent(businessName)}</span> via{" "}
-          <span className="text-slate-500 font-semibold">RoadmapAI</span>
+        <p className="text-center text-[10px] text-slate-600 mt-6">
+          Thank you for helping <span className="text-slate-400 font-semibold">{decodeURIComponent(businessName)}</span> serve you better.
         </p>
       </div>
     </div>

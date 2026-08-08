@@ -3,24 +3,24 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
-// ── Engagement mode configs ──────────────────────────────────────────────────
+// ── Engagement mode styling & icons ──────────────────────────────────────────
 const MODE_THEMES = {
   reward: {
     gradient: "from-amber-500/10 via-orange-500/5 to-transparent",
     accent:   "amber",
     icon:     "🎁",
-    ratingLabel: "How would you rate your experience?",
-    textPlaceholder: "Tell us about your experience. What did you like? What could we improve?",
-    namePrompt: "Your name (optional — required to receive points)",
-    ctaLabel: "Submit & Claim Points",
+    ratingLabel: "How was your experience?",
+    textPlaceholder: "Tell us what we can improve...",
+    namePrompt: "Your name (optional)",
+    ctaLabel: "Submit Feedback",
     ctaClass: "bg-amber-500 hover:bg-amber-400 text-black",
   },
   improvement: {
     gradient: "from-cyan-500/8 via-blue-500/5 to-transparent",
     accent:   "cyan",
     icon:     "💬",
-    ratingLabel: "How satisfied were you with our service?",
-    textPlaceholder: "Please share your experience. All feedback is confidential and used solely to improve our services.",
+    ratingLabel: "How was your experience today?",
+    textPlaceholder: "Tell us what we can improve. All feedback is confidential.",
     namePrompt: "Your name (optional)",
     ctaLabel: "Submit Feedback",
     ctaClass: "bg-cyan-600 hover:bg-cyan-500 text-white",
@@ -29,10 +29,10 @@ const MODE_THEMES = {
     gradient: "from-indigo-500/10 via-violet-500/5 to-transparent",
     accent:   "indigo",
     icon:     "🚀",
-    ratingLabel: "How would you rate this? (optional)",
-    textPlaceholder: "What's working? What's broken? What would you love to see next?",
+    ratingLabel: "How was your experience?",
+    textPlaceholder: "What should we improve? What feature would you like to see next?",
     namePrompt: "Your name (optional)",
-    ctaLabel: "Send Feedback",
+    ctaLabel: "Submit Feedback",
     ctaClass: "bg-indigo-600 hover:bg-indigo-500 text-white",
   },
 } as const;
@@ -52,6 +52,11 @@ interface FormConfig {
   show_reward_promise: boolean;
   show_tag_selector: boolean;
   requires_rating: boolean;
+  minimum_feedback_length: number;
+  points_per_feedback: number;
+  reward_enabled: boolean;
+  reward_description: string;
+  reward_threshold: number;
 }
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -104,8 +109,6 @@ export default function FeedbackFormPage() {
   const [selectedTag, setSelectedTag] = useState("");
   const [charCount, setCharCount] = useState(0);
 
-  const MIN_CHARS = 20;
-
   useEffect(() => {
     fetch(`${API}/feedback/${businessId}`)
       .then(r => {
@@ -117,12 +120,14 @@ export default function FeedbackFormPage() {
       .finally(() => setLoading(false));
   }, [businessId]);
 
+  const minChars = config?.minimum_feedback_length || 10;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!config || submitting) return;
 
     const trimmed = text.trim();
-    if (trimmed.length < MIN_CHARS) return;
+    if (trimmed.length < minChars) return;
     if (config.requires_rating && rating === 0) return;
 
     setSubmitting(true);
@@ -139,13 +144,19 @@ export default function FeedbackFormPage() {
         }),
       });
 
-      if (res.ok) {
-        router.push(`/feedback/${businessId}/success?mode=${config.engagement_mode}&biz=${encodeURIComponent(config.business_name)}`);
+      const resData = await res.json();
+      if (res.ok && resData.success) {
+        const queryParams = new URLSearchParams({
+          mode: config.engagement_mode,
+          biz: config.business_name,
+          msg: resData.message || config.mode_success_message,
+          pts: String(resData.points_earned || 0),
+        });
+        router.push(`/feedback/${businessId}/success?${queryParams.toString()}`);
       } else {
-        throw new Error("Submission failed");
+        alert(resData.detail || "Submission failed. Please try again.");
       }
     } catch {
-      // show inline error
       alert("Sorry, something went wrong. Please try again.");
     } finally {
       setSubmitting(false);
@@ -173,44 +184,46 @@ export default function FeedbackFormPage() {
 
   const mode  = config.engagement_mode;
   const theme = MODE_THEMES[mode] || MODE_THEMES.improvement;
-  const isValid = text.trim().length >= MIN_CHARS && (!config.requires_rating || rating > 0);
+  const isValid = text.trim().length >= minChars && (!config.requires_rating || rating > 0);
 
   return (
-    <div className={`min-h-screen bg-[#07080d] relative`}>
-      {/* Ambient gradient */}
+    <div className="min-h-screen bg-[#07080d] relative">
+      {/* Ambient background gradient */}
       <div className={`fixed inset-0 bg-gradient-to-br ${theme.gradient} pointer-events-none`} />
 
-      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 py-12">
-        <div className="w-full max-w-lg">
+      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 py-8 sm:py-12">
+        <div className="w-full max-w-md sm:max-w-lg">
 
-          {/* Header */}
-          <div className="text-center mb-8">
+          {/* Business Brand Header */}
+          <div className="text-center mb-6 sm:mb-8">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/6 border border-white/10 mb-4">
               <span className="text-sm">{theme.icon}</span>
-              <span className="text-[11px] font-semibold text-slate-400">{config.business_name}</span>
+              <span className="text-[12px] font-bold text-slate-200">{config.business_name}</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-slate-100 mb-3 leading-tight">
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-100 mb-2 leading-tight">
               {config.mode_headline}
             </h1>
-            <p className="text-sm text-slate-400 leading-relaxed">{config.mode_subtext}</p>
+            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed max-w-sm mx-auto">
+              {config.mode_subtext}
+            </p>
           </div>
 
-          {/* Form card */}
-          <form onSubmit={handleSubmit} className="bg-[#0d0f1a]/90 border border-white/8 rounded-3xl p-6 sm:p-8 backdrop-blur-xl shadow-2xl space-y-6">
+          {/* Customer Feedback Card */}
+          <form onSubmit={handleSubmit} className="bg-[#0d0f1a]/95 border border-white/10 rounded-3xl p-5 sm:p-8 backdrop-blur-xl shadow-2xl space-y-5 sm:space-y-6">
 
-            {/* Rating */}
+            {/* Rating Stars */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 text-center">
                 {theme.ratingLabel}
-                {config.requires_rating && <span className="text-red-400 ml-1">*</span>}
+                {config.requires_rating && <span className="text-amber-400 ml-1">*</span>}
               </label>
               <StarRatingInput value={rating} onChange={setRating} />
             </div>
 
-            {/* PRODUCT: Tag selector */}
+            {/* PRODUCT MODE: Optional tag selector */}
             {config.show_tag_selector && (
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
                   Category (optional)
                 </label>
                 <div className="flex flex-wrap gap-2">
@@ -221,7 +234,7 @@ export default function FeedbackFormPage() {
                       onClick={() => setSelectedTag(selectedTag === tag ? "" : tag)}
                       className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
                         selectedTag === tag
-                          ? "bg-indigo-600 border-indigo-500 text-white"
+                          ? "bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20"
                           : "border-white/10 text-slate-400 hover:border-white/20 hover:text-slate-200"
                       }`}
                     >
@@ -232,58 +245,61 @@ export default function FeedbackFormPage() {
               </div>
             )}
 
-            {/* Feedback text */}
+            {/* Main Feedback Text Area */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Your Feedback <span className="text-red-400">*</span>
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Tell us what we can improve <span className="text-amber-400">*</span>
                 </label>
-                <span className={`text-[10px] font-mono ${charCount >= MIN_CHARS ? "text-emerald-400" : "text-slate-600"}`}>
-                  {charCount}/{MIN_CHARS} min
+                <span className={`text-[10px] font-mono ${charCount >= minChars ? "text-emerald-400" : "text-slate-600"}`}>
+                  {charCount}/{minChars} min
                 </span>
               </div>
               <textarea
                 value={text}
                 onChange={e => { setText(e.target.value); setCharCount(e.target.value.trim().length); }}
                 placeholder={theme.textPlaceholder}
-                rows={5}
+                rows={4}
                 required
-                minLength={MIN_CHARS}
+                minLength={minChars}
                 maxLength={2000}
-                className="w-full bg-[#161827] border border-white/8 rounded-2xl px-4 py-3.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-all resize-none leading-relaxed"
+                className="w-full bg-[#161827] border border-white/10 rounded-2xl px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-all resize-none leading-relaxed"
               />
             </div>
 
-            {/* Optional name */}
+            {/* Optional Customer Name */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
                 {theme.namePrompt}
               </label>
               <input
                 type="text"
                 value={name}
                 onChange={e => setName(e.target.value)}
-                placeholder={mode === "reward" ? "e.g. Priya S." : "e.g. Rahul"}
+                placeholder="e.g. Rahul"
                 maxLength={80}
-                className="w-full bg-[#161827] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 transition-all"
+                className="w-full bg-[#161827] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 transition-all"
               />
             </div>
 
-            {/* REWARD: reward promise banner */}
-            {config.show_reward_promise && (
-              <div className="flex items-center gap-3 p-3.5 rounded-xl bg-amber-500/8 border border-amber-500/20">
-                <span className="text-xl shrink-0">⭐</span>
-                <p className="text-[11px] text-amber-300/80 leading-relaxed">
-                  <strong>Earn loyalty points</strong> for submitting valid feedback. Points are credited to your account within 24 hours.
-                </p>
+            {/* REWARD MODE Banner */}
+            {config.show_reward_promise && config.reward_enabled && (
+              <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+                <span className="text-2xl shrink-0">🎁</span>
+                <div className="text-[11px] text-amber-300 leading-relaxed">
+                  <p className="font-bold">Earn {config.points_per_feedback} loyalty points</p>
+                  <p className="text-amber-400/80">
+                    {config.reward_description || "Redeem points for discounts or special rewards on your next visit."}
+                  </p>
+                </div>
               </div>
             )}
 
-            {/* Submit */}
+            {/* Submit Button */}
             <button
               type="submit"
               disabled={!isValid || submitting}
-              className={`w-full py-4 rounded-2xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${theme.ctaClass} disabled:opacity-40 disabled:cursor-not-allowed`}
+              className={`w-full py-3.5 sm:py-4 rounded-2xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${theme.ctaClass} disabled:opacity-40 disabled:cursor-not-allowed`}
             >
               {submitting ? (
                 <><div className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin" /> Submitting…</>
@@ -292,16 +308,15 @@ export default function FeedbackFormPage() {
               )}
             </button>
 
-            <p className="text-center text-[10px] text-slate-600 leading-relaxed">
-              Your feedback is kept private and used only to improve {config.business_name}.
-              {config.show_tag_selector && " Your input directly shapes our product roadmap."}
+            <p className="text-center text-[10px] text-slate-500 leading-relaxed">
+              Your feedback goes directly to {config.business_name}. No spam. No public posting.
             </p>
 
           </form>
 
-          {/* Footer */}
-          <p className="text-center text-[10px] text-slate-700 mt-6">
-            Powered by <span className="text-slate-500 font-semibold">RoadmapAI</span> — Customer Intelligence Platform
+          {/* Simple Clean Footer */}
+          <p className="text-center text-[10px] text-slate-600 mt-6">
+            Provided by <span className="text-slate-400 font-semibold">{config.business_name}</span>
           </p>
         </div>
       </div>
