@@ -151,14 +151,15 @@ def _generate_qr_base64(url: str) -> Optional[str]:
 
 
 def _build_response(row: dict, feedback_type: str) -> BusinessResponse:
-    industry = row["industry"]
+    industry = row.get("industry", "Supermarket")
+    biz_id = row.get("id", str(uuid.uuid4()))
     return BusinessResponse(
-        id=row["id"],
-        business_name=row["business_name"],
+        id=biz_id,
+        business_name=row.get("business_name", "Business"),
         industry=industry,
-        email=row["email"],
-        feedback_url=row["feedback_url"],
-        dashboard_url=row.get("dashboard_url") or f"{APP_BASE_URL}/business/{row['id']}",
+        email=row.get("email", "info@business.com"),
+        feedback_url=row.get("feedback_url") or f"{APP_BASE_URL}/feedback/{biz_id}",
+        dashboard_url=row.get("dashboard_url") or f"{APP_BASE_URL}/business/{biz_id}",
         qr_code=row.get("qr_code"),
         feedback_type=feedback_type,
         feedback_method=row.get("feedback_method") or "none",
@@ -167,7 +168,7 @@ def _build_response(row: dict, feedback_type: str) -> BusinessResponse:
         avg_revenue_per_user=float(row.get("avg_revenue_per_user") or 500.0),
         premium_pct=float(row.get("premium_pct") or 20.0),
         currency=row.get("currency") or "INR",
-        created_at=str(row["created_at"]),
+        created_at=str(row.get("created_at") or ""),
     )
 
 
