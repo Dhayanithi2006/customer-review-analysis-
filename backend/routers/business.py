@@ -484,3 +484,91 @@ async def get_business_reviews(business_id: str, limit: int = 50, offset: int = 
         "reviews":     reviews,
     }
 
+
+@router.get("/{business_id}/feedback-health")
+async def get_feedback_health(business_id: str):
+    """
+    Phase 7 — Feedback Health Analytics.
+    Returns compact, high-value engagement metrics derived from existing Review Repository
+    and feedback_submissions without duplicate DB logic.
+    """
+    from datetime import datetime, timezone, timedelta
+
+    db = get_db()
+
+    biz = db.table("businesses").select("id,business_name,industry").eq("id", business_id).execute().data
+    if not biz:
+        raise HTTPException(status_code=404, detail="Business not found.")
+
+    industry = biz[0]["industry"]
+
+    # 1. Fetch engagement settings mode
+    settings_res = db.table("feedback_engagement_settings").select("feedback_mode").eq("business_id", business_id).execute().data
+    mode = settings_res[0]["feedback_mode"] if settings_res else _derive_engagement_mode(industry)
+
+    # 2. Count feedback submissions & weekly count
+    now = datetime.now(timezone.utc)
+    one_week_ago = (now - timedelta(days=7)).isoformat()
+
+    subs = db.table("feedback_submissions").select("id,created_at").eq("business_id", business_id).execute().data or []
+    total_form_subs = len(subs)
+    weekly_subs = sum(1 for s in subs if str(s.get("created_at", "")) >= one_week_ago)
+
+    # 3. Sum reward points issued
+    rewards = db.table("feedback_rewards").select("points_awarded").eq("business_id", business_id).eq("reward_status", "awarded").execute().data or []
+    total_points_issued = sum(r.get("points_awarded", 0) for r in rewards)
+
+    # 4. Review repository metrics (sessions)
+    versions = db.table("analysis_versions").select("session_id").eq("business_id", business_id).execute().data or []
+    session_ids = [v["session_id"] for v in versions]
+
+    total_reviews = 0
+    top_source = "QR Code Form" if industry in QR_BASED_INDUSTRIES else "App Direct Ingestion"
+    sentiment_counts = {"negative": 0, "neutral": 0, "positive": 0}
+    most_repeated_issue = "—"
+
+    if session_ids:
+        rev_data = db.table("reviews").select("sentiment_label,source").in_("session_id", session_ids).execute().data or []
+        total_reviews = len(rev_data)
+
+        for r in rev_data:
+            lbl = (r.get("sentiment_label") or "").lower()
+            if "neg" in lbl:
+                sentiment_counts["negative"] += 1
+            elif "pos" in lbl:
+                sentiment_counts["positive"] += 1
+            else:
+                sentiment_counts["neutral"] += 1
+
+        # Fetch top priority issue from latest dashboard if available
+        dash_res = db.table("analysis_versions").select("session_id").eq("business_id", business_id).eq("status", "complete").order("version", desc=True).limit(1).execute().data
+        if dash_res:
+            latest_sid = dash_res[0]["session_id"]
+            d_res = db.table("dashboard_cache").select("dashboard_json").eq("session_id", latest_sid).execute().data
+            if d_res and "top_priority_issue" in d_res[0].get("dashboard_json", {}):
+                issue = d_res[0]["dashboard_json"]["top_priority_issue"]
+                if isinstance(issue, dict):
+                    most_repeated_issue = issue.get("issue_key", "—").replace("_", " ")
+                elif isinstance(issue, str):
+                    most_repeated_issue = issue
+
+    total_feedback = total_form_subs + total_reviews
+    total_sent = sum(sentiment_counts.values()) or 1
+    neg_pct = round((sentiment_counts["negative"] / total_sent) * 100)
+    pos_pct = round((sentiment_counts["positive"] / total_sent) * 100)
+
+    return {
+        "business_id": business_id,
+        "total_feedback": total_feedback,
+        "feedback_this_week": weekly_subs,
+        "engagement_mode": mode,
+        "points_issued": total_points_issued,
+        "top_source": top_source,
+        "most_repeated_issue": most_repeated_issue,
+        "sentiment_distribution": {
+            "negative_pct": neg_pct,
+            "positive_pct": pos_pct,
+            "neutral_pct": 100 - (neg_pct + pos_pct),
+        }
+    }
+

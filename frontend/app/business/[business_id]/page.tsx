@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getLatestAnalysis, getBusinessAnalyses, getPendingSubmissions, processSubmissions } from "@/lib/business-api";
-import type { LatestAnalysisResponse, AnalysisVersion, PendingSubmissionsResponse } from "@/lib/business-api";
+import { getLatestAnalysis, getBusinessAnalyses, getPendingSubmissions, processSubmissions, getFeedbackHealth } from "@/lib/business-api";
+import type { LatestAnalysisResponse, AnalysisVersion, PendingSubmissionsResponse, FeedbackHealthResponse } from "@/lib/business-api";
 import { getDashboard } from "@/lib/api";
 import type { DashboardData } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -110,11 +110,12 @@ export default function WorkspaceOverviewPage() {
   const params = useParams();
   const businessId = params.business_id as string;
 
-  const [latest, setLatest]     = useState<LatestAnalysisResponse | null>(null);
-  const [history, setHistory]   = useState<AnalysisVersion[]>([]);
-  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
-  const [pending, setPending]   = useState<PendingSubmissionsResponse | null>(null);
-  const [loading, setLoading]   = useState(true);
+  const [latest, setLatest]         = useState<LatestAnalysisResponse | null>(null);
+  const [history, setHistory]       = useState<AnalysisVersion[]>([]);
+  const [dashboard, setDashboard]   = useState<DashboardData | null>(null);
+  const [pending, setPending]       = useState<PendingSubmissionsResponse | null>(null);
+  const [health, setHealth]         = useState<FeedbackHealthResponse | null>(null);
+  const [loading, setLoading]       = useState(true);
   const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
@@ -136,13 +137,9 @@ export default function WorkspaceOverviewPage() {
           }
         }
 
-        // Load pending form submissions (best-effort — table may not exist yet)
-        try {
-          const pend = await getPendingSubmissions(businessId);
-          setPending(pend);
-        } catch {
-          /* table not yet migrated — silent */
-        }
+        // Best-effort metrics loads
+        getPendingSubmissions(businessId).then(setPending).catch(() => null);
+        getFeedbackHealth(businessId).then(setHealth).catch(() => null);
       } catch {
         /* ok */
       } finally {
@@ -271,6 +268,85 @@ export default function WorkspaceOverviewPage() {
             </Button>
           )}
         </div>
+      )}
+
+      {/* Compact FEEDBACK HEALTH Analytics Card — Phase 7 */}
+      {health && (
+        <section className="mb-8">
+          <div className="rounded-[20px] border border-white/8 bg-surface p-5 md:p-6 shadow-xl card-elevated">
+            <div className="flex items-center justify-between gap-2 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-base">📊</span>
+                <h3 className="text-xs font-bold uppercase tracking-[0.1em] text-slate-400">
+                  Feedback Health
+                </h3>
+              </div>
+              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-indigo-500/10 border-indigo-500/25 text-indigo-300 capitalize">
+                {health.engagement_mode} Mode
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+              <div>
+                <p className="text-[10px] text-slate-500 font-semibold uppercase">Total Feedback</p>
+                <p className="text-lg sm:text-xl font-extrabold text-white font-mono mt-0.5">
+                  {health.total_feedback.toLocaleString()}
+                </p>
+                <p className="text-[10px] text-emerald-400 mt-0.5 font-semibold">
+                  +{health.feedback_this_week} this week
+                </p>
+              </div>
+
+              <div>
+                <p className="text-[10px] text-slate-500 font-semibold uppercase">
+                  {health.engagement_mode === "reward" ? "Points Issued" : "Top Source"}
+                </p>
+                <p className="text-lg sm:text-xl font-extrabold text-white font-mono mt-0.5 truncate">
+                  {health.engagement_mode === "reward"
+                    ? health.points_issued.toLocaleString()
+                    : health.top_source}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-0.5 truncate">
+                  {health.engagement_mode === "reward" ? "Incentives Ledger" : "Primary Ingestion"}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-[10px] text-slate-500 font-semibold uppercase">Sentiment Mix</p>
+                <p className="text-lg sm:text-xl font-extrabold text-red-400 font-mono mt-0.5">
+                  {health.sentiment_distribution.negative_pct}% <span className="text-xs font-normal text-slate-400">neg</span>
+                </p>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  {health.sentiment_distribution.positive_pct}% positive
+                </p>
+              </div>
+
+              <div>
+                <p className="text-[10px] text-slate-500 font-semibold uppercase">Most Repeated Issue</p>
+                <p className="text-sm font-bold text-amber-300 truncate mt-1">
+                  {health.most_repeated_issue}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-0.5">Top Priority Cluster</p>
+              </div>
+            </div>
+
+            {/* Sentiment Bar */}
+            <div className="w-full h-1.5 rounded-full bg-white/5 overflow-hidden flex">
+              <div
+                style={{ width: `${health.sentiment_distribution.negative_pct}%` }}
+                className="h-full bg-red-500/80"
+              />
+              <div
+                style={{ width: `${health.sentiment_distribution.neutral_pct}%` }}
+                className="h-full bg-amber-500/60"
+              />
+              <div
+                style={{ width: `${health.sentiment_distribution.positive_pct}%` }}
+                className="h-full bg-emerald-500/80"
+              />
+            </div>
+          </div>
+        </section>
       )}
 
       {/* Health cards */}

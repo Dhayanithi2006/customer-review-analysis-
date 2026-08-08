@@ -212,3 +212,24 @@ export async function updateFeedbackSettings(
   return res.json();
 }
 
+export interface FeedbackHealthResponse {
+  business_id: string;
+  total_feedback: number;
+  feedback_this_week: number;
+  engagement_mode: string;
+  points_issued: number;
+  top_source: string;
+  most_repeated_issue: string;
+  sentiment_distribution: {
+    negative_pct: number;
+    positive_pct: number;
+    neutral_pct: number;
+  };
+}
+
+export async function getFeedbackHealth(businessId: string): Promise<FeedbackHealthResponse> {
+  const res = await fetch(`${BASE_URL}/business/${businessId}/feedback-health`);
+  if (!res.ok) throw new Error("Failed to load feedback health metrics");
+  return res.json();
+}
+
