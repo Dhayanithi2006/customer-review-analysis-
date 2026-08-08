@@ -141,7 +141,7 @@ def _generate_qr_base64(url: str) -> Optional[str]:
         qr.make(fit=True)
         img = qr.make_image(fill_color="#1e1b4b", back_color="white")
         buf = io.BytesIO()
-        img.save(buf, format="PNG")
+        img.save(buf)
         buf.seek(0)
         encoded = base64.b64encode(buf.read()).decode()
         return f"data:image/png;base64,{encoded}"
@@ -247,10 +247,10 @@ async def register_business(body: RegisterBusinessRequest):
         .execute()
     )
 
-    if not result.data:
+    if not result.data or not isinstance(result.data, list):
         raise HTTPException(status_code=500, detail="Failed to create business record.")
 
-    row = result.data[0]
+    row = dict(result.data[0])
     logger.info(
         f"Business registered: id={business_id} "
         f"name={body.business_name} industry={body.industry} "
@@ -271,11 +271,12 @@ async def get_business(business_id: str):
         .execute()
         .data
     )
-    if not result:
+    if not result or not isinstance(result, list):
         raise HTTPException(status_code=404, detail="Business not found.")
 
-    row = result[0]
-    feedback_type = "qr" if row["industry"] in QR_BASED_INDUSTRIES else "digital"
+    row = dict(result[0])
+    industry_str = str(row.get("industry", ""))
+    feedback_type = "qr" if industry_str in QR_BASED_INDUSTRIES else "digital"
     return _build_response(row, feedback_type)
 
 
@@ -299,11 +300,12 @@ async def update_workspace_settings(business_id: str, body: WorkspaceSettingsUpd
         .execute()
     )
 
-    if not result.data:
+    if not result.data or not isinstance(result.data, list):
         raise HTTPException(status_code=404, detail="Business not found.")
 
-    row = result.data[0]
-    feedback_type = "qr" if row["industry"] in QR_BASED_INDUSTRIES else "digital"
+    row = dict(result.data[0])
+    industry_str = str(row.get("industry", ""))
+    feedback_type = "qr" if industry_str in QR_BASED_INDUSTRIES else "digital"
     return _build_response(row, feedback_type)
 
 
@@ -335,26 +337,32 @@ async def list_analyses(business_id: str):
 
     # Enrich each version with session info
     enriched = []
-    for v in versions:
-        session = (
-            db.table("sessions")
-            .select("status,total_reviews,actionable_reviews,source,filename,created_at")
-            .eq("id", v["session_id"])
-            .execute()
-            .data
-        )
-        session_data = session[0] if session else {}
-        # Sync version status from session
-        v["status"] = session_data.get("status", v["status"])
-        v["total_reviews"] = session_data.get("total_reviews", 0)
-        v["actionable_reviews"] = session_data.get("actionable_reviews", 0)
-        v["source"] = session_data.get("source", "unknown")
-        v["filename"] = session_data.get("filename", "")
-        enriched.append(v)
+    if isinstance(versions, list):
+        for v in versions:
+            if not isinstance(v, dict):
+                continue
+            v_dict = dict(v)
+            session = (
+                db.table("sessions")
+                .select("status,total_reviews,actionable_reviews,source,filename,created_at")
+                .eq("id", v_dict.get("session_id", ""))
+                .execute()
+                .data
+            )
+            session_data = dict(session[0]) if (session and isinstance(session, list) and isinstance(session[0], dict)) else {}
+            # Sync version status from session
+            v_dict["status"] = session_data.get("status", v_dict.get("status", "pending"))
+            v_dict["total_reviews"] = session_data.get("total_reviews", 0)
+            v_dict["actionable_reviews"] = session_data.get("actionable_reviews", 0)
+            v_dict["source"] = session_data.get("source", "unknown")
+            v_dict["filename"] = session_data.get("filename", "")
+            enriched.append(v_dict)
+
+    biz_name = dict(biz[0]).get("business_name", "") if (biz and isinstance(biz, list) and len(biz) > 0) else ""
 
     return {
         "business_id":   business_id,
-        "business_name": biz[0]["business_name"],
+        "business_name": biz_name,
         "total_analyses": len(enriched),
         "analyses":      enriched,
     }
@@ -384,7 +392,7 @@ async def get_latest_analysis(business_id: str):
         .data
     )
 
-    if not latest_version:
+    if not latest_version or not isinstance(latest_version, list):
         return {
             "has_analysis": False,
             "session_id": None,
@@ -394,36 +402,39 @@ async def get_latest_analysis(business_id: str):
 
     # Find first completed one
     for v in latest_version:
+        if not isinstance(v, dict):
+            continue
         session = (
             db.table("sessions")
             .select("status,total_reviews,actionable_reviews,created_at")
-            .eq("id", v["session_id"])
+            .eq("id", v.get("session_id", ""))
             .execute()
             .data
         )
-        if session and session[0].get("status") == "complete":
+        if session and isinstance(session, list) and isinstance(session[0], dict) and session[0].get("status") == "complete":
+            s_row = dict(session[0])
             return {
                 "has_analysis": True,
-                "session_id":   v["session_id"],
-                "version":      v["version"],
-                "label":        v["label"],
-                "created_at":   str(session[0]["created_at"]),
-                "total_reviews": session[0].get("total_reviews", 0),
-                "actionable_reviews": session[0].get("actionable_reviews", 0),
+                "session_id":   v.get("session_id"),
+                "version":      v.get("version"),
+                "label":        v.get("label"),
+                "created_at":   str(s_row.get("created_at", "")),
+                "total_reviews": s_row.get("total_reviews", 0),
+                "actionable_reviews": s_row.get("actionable_reviews", 0),
             }
 
     # Latest run is still processing
-    v = latest_version[0]
-    session = db.table("sessions").select("status,current_step").eq("id", v["session_id"]).execute().data
-    status = session[0].get("status", "pending") if session else "pending"
+    v_top = dict(latest_version[0]) if isinstance(latest_version[0], dict) else {}
+    session = db.table("sessions").select("status,current_step").eq("id", v_top.get("session_id", "")).execute().data
+    status = (session[0].get("status", "pending") if (session and isinstance(session, list) and isinstance(session[0], dict)) else "pending")
 
     return {
         "has_analysis":  False,
-        "session_id":    v["session_id"],
-        "version":       v["version"],
-        "label":         v["label"],
+        "session_id":    v_top.get("session_id"),
+        "version":       v_top.get("version"),
+        "label":         v_top.get("label"),
         "status":        status,
-        "message":       f"Analysis {v['label']} is currently {status}.",
+        "message":       f"Analysis {v_top.get('label', '')} is currently {status}.",
     }
 
 
