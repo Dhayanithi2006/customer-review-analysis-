@@ -28,6 +28,10 @@ interface Review {
   is_duplicate: boolean;
   sentiment_label: string | null;
   sentiment_score: number | null;
+  customer_email?: string | null;
+  follow_up_eligible?: boolean;
+  follow_up_sent?: boolean;
+  followup_response?: string | null;
 }
 
 interface EnrichedReview extends Review {
@@ -165,6 +169,13 @@ function priorityVariant(
   return "default";
 }
 
+function maskEmail(email: string | null | undefined): string {
+  if (!email || !email.includes("@")) return "—";
+  const [name, domain] = email.split("@");
+  if (name.length <= 2) return `${name}***@${domain}`;
+  return `${name[0]}***${name[name.length - 1]}@${domain}`;
+}
+
 /* ── expandable card ───────────────────────────────────────────────────── */
 
 function ReviewCard({ review }: { review: EnrichedReview }) {
@@ -205,6 +216,21 @@ function ReviewCard({ review }: { review: EnrichedReview }) {
               )}
               {review.priority && (
                 <Badge variant={priorityVariant(review.priority)}>{review.priority}</Badge>
+              )}
+              {review.customer_email && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-purple-500/10 text-purple-300 border-purple-500/20">
+                  Email: {maskEmail(review.customer_email)}
+                </span>
+              )}
+              {review.follow_up_sent && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-indigo-500/10 text-indigo-300 border-indigo-500/20">
+                  Follow-up: Sent
+                </span>
+              )}
+              {review.followup_response && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-500/10 text-emerald-300 border-emerald-500/20 capitalize">
+                  Response: {review.followup_response.replace("_", " ")}
+                </span>
               )}
               {review.is_spam && <Badge variant="danger">Spam</Badge>}
               {review.is_duplicate && <Badge variant="warning">Duplicate</Badge>}

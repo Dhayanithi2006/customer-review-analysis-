@@ -24,7 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from routers import upload, pipeline, results, meeting, export, play_store, business, feedback, feedback_settings, reward, resolutions
+from routers import upload, pipeline, results, meeting, export, play_store, business, feedback, feedback_settings, reward, resolutions, followup
 # Register API Routers
 app.include_router(upload.router)
 app.include_router(play_store.router)
@@ -37,6 +37,7 @@ app.include_router(feedback.router)
 app.include_router(feedback_settings.router)
 app.include_router(reward.router)
 app.include_router(resolutions.router)
+app.include_router(followup.router)
 
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(ingest.router, prefix="/api/v1")

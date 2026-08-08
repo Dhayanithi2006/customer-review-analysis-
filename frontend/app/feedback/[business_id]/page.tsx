@@ -347,6 +347,24 @@ export default function FeedbackFormPage() {
               />
             </div>
 
+            {/* Optional Customer Email Input */}
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                Email (optional)
+              </label>
+              <p className="text-[10px] text-slate-500 mb-2">
+                Optional — only used to follow up on this feedback.
+              </p>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="name@example.com"
+                maxLength={200}
+                className="w-full bg-[#161827] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 transition-all"
+              />
+            </div>
+
             {/* REWARD MODE Banner (Secondary to feedback request) */}
             {config.show_reward_promise && config.reward_enabled && !inCooldown && (
               <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20">

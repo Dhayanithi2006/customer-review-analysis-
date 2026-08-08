@@ -210,3 +210,82 @@ export const exportUrls = {
   sprint: (sid: string) => `${BASE_URL}/export/${sid}/sprint`,
   roadmap: (sid: string) => `${BASE_URL}/export/${sid}/roadmap`,
 };
+
+// ── Closed-Loop Feedback Resolution API ─────────────────────────────────
+export interface ResolutionImpact {
+  business_id: string;
+  issue_key: string;
+  status: string;
+  action_taken: string | null;
+  action_taken_at: string | null;
+  follow_up_sent_at: string | null;
+  contacted_count: number;
+  response_count: number;
+  response_rate: number;
+  improved_count: number;
+  somewhat_improved_count: number;
+  not_improved_count: number;
+  improvement_percentage: number;
+  is_reopened: boolean;
+  threshold: number;
+}
+
+export async function recordBusinessAction(
+  businessId: string,
+  issueKey: string,
+  actionTaken: string,
+  status: string = "ACTION_TAKEN"
+) {
+  return apiFetch<{ success: boolean; status: string; action_taken: string }>(
+    `/business/${businessId}/issues/${issueKey}/action`,
+    {
+      method: "POST",
+      body: JSON.stringify({ action_taken: actionTaken, status }),
+      skipCache: true,
+    }
+  );
+}
+
+export async function sendFollowups(businessId: string, issueKey: string) {
+  return apiFetch<{ success: boolean; eligible_count: number; sent_count: number; message: string; status: string }>(
+    `/business/${businessId}/issues/${issueKey}/send-followups`,
+    {
+      method: "POST",
+      skipCache: true,
+    }
+  );
+}
+
+export async function getFollowupContext(token: string) {
+  return apiFetch<{
+    already_submitted: boolean;
+    business_name?: string;
+    issue_title?: string;
+    action_taken?: string;
+    message?: string;
+    token?: string;
+  }>(`/follow-up/${token}`, { skipCache: true });
+}
+
+export async function submitFollowupResponse(
+  token: string,
+  response: "improved" | "somewhat_improved" | "not_improved",
+  comment?: string
+) {
+  return apiFetch<{ success: boolean; message: string; improvement_percentage: number; status: string }>(
+    `/follow-up/${token}/response`,
+    {
+      method: "POST",
+      body: JSON.stringify({ response, comment }),
+      skipCache: true,
+    }
+  );
+}
+
+export async function getResolutionImpact(businessId: string, issueKey: string) {
+  return apiFetch<ResolutionImpact>(
+    `/business/${businessId}/issues/${issueKey}/resolution`,
+    { skipCache: true }
+  );
+}
+

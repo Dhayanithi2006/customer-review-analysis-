@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getLatestAnalysis } from "@/lib/business-api";
-import { getDashboard, getRoadmap, getSprint } from "@/lib/api";
+import { getDashboard, getRoadmap, getSprint, recordBusinessAction, sendFollowups, getResolutionImpact } from "@/lib/api";
+import type { ResolutionImpact } from "@/lib/api";
 import type { DashboardData, IssueCluster } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -124,6 +125,15 @@ export default function DecisionCenterPage() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(true);
 
+  // Closed-Loop Resolution State
+  const [actionModalOpen, setActionModalOpen] = useState(false);
+  const [actionIssue, setActionIssue] = useState<IssueCluster | null>(null);
+  const [actionInput, setActionInput] = useState("");
+  const [savingAction, setSavingAction] = useState(false);
+  const [impacts, setImpacts] = useState<Record<string, ResolutionImpact>>({});
+  const [sendingFollowup, setSendingFollowup] = useState(false);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -167,6 +177,56 @@ export default function DecisionCenterPage() {
     };
     load();
   }, [businessId, sessionParam]);
+
+  // Load Resolution Impact data when issue selected
+  useEffect(() => {
+    if (!selectedKey || !businessId) return;
+    getResolutionImpact(businessId, selectedKey)
+      .then((data) => {
+        setImpacts((prev) => ({ ...prev, [selectedKey]: data }));
+      })
+      .catch(() => null);
+  }, [businessId, selectedKey]);
+
+  const handleOpenActionModal = (issue: IssueCluster, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setActionIssue(issue);
+    setActionInput(impacts[issue.issue_key]?.action_taken || "");
+    setActionModalOpen(true);
+  };
+
+  const handleSaveAction = async () => {
+    if (!actionIssue || !actionInput.trim() || savingAction) return;
+    setSavingAction(true);
+    try {
+      await recordBusinessAction(businessId, actionIssue.issue_key, actionInput.trim());
+      const updatedImpact = await getResolutionImpact(businessId, actionIssue.issue_key);
+      setImpacts((prev) => ({ ...prev, [actionIssue.issue_key]: updatedImpact }));
+      setActionModalOpen(false);
+      setActionNotice(`Action recorded for ${actionIssue.issue_key.replace(/_/g, " ")}`);
+      setTimeout(() => setActionNotice(null), 4000);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to save action");
+    } finally {
+      setSavingAction(false);
+    }
+  };
+
+  const handleSendFollowups = async (issueKey: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (sendingFollowup) return;
+    setSendingFollowup(true);
+    try {
+      const res = await sendFollowups(businessId, issueKey);
+      alert(res.message);
+      const updatedImpact = await getResolutionImpact(businessId, issueKey);
+      setImpacts((prev) => ({ ...prev, [issueKey]: updatedImpact }));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to send followups");
+    } finally {
+      setSendingFollowup(false);
+    }
+  };
 
   const issues = useMemo(
     () => (dashboard?.issues || []) as IssueCluster[],
@@ -372,16 +432,27 @@ export default function DecisionCenterPage() {
             const rank = issue.priority_rank || idx + 1;
             const pri = priorityLabel(rank, issue.avg_severity || 0);
             const active = selectedKey === issue.issue_key;
+            const impact = impacts[issue.issue_key];
+            const status = impact?.status || "IDENTIFIED";
+
+            const statusColors: Record<string, string> = {
+              IDENTIFIED: "bg-[#161827] text-slate-400 border-white/10",
+              ACTION_PLANNED: "bg-amber-500/10 text-amber-300 border-amber-500/20",
+              ACTION_TAKEN: "bg-indigo-500/10 text-indigo-300 border-indigo-500/20",
+              FOLLOW_UP_SENT: "bg-purple-500/10 text-purple-300 border-purple-500/20",
+              IMPROVED: "bg-emerald-500/10 text-emerald-300 border-emerald-500/20",
+              REOPENED: "bg-red-500/15 text-red-300 border-red-500/30",
+            };
+
             return (
-              <button
+              <div
                 key={issue.id || issue.issue_key}
-                type="button"
                 onClick={() => {
                   setSelectedKey(issue.issue_key);
                   setEvidenceOpen(true);
                 }}
                 className={cn(
-                  "text-left rounded-[20px] border p-5 md:p-6 transition-all duration-200",
+                  "cursor-pointer text-left rounded-[20px] border p-5 md:p-6 transition-all duration-200",
                   "bg-surface shadow-[0_2px_12px_rgba(0,0,0,0.24)]",
                   active
                     ? "border-primary/35 ring-1 ring-primary/20"
@@ -396,6 +467,9 @@ export default function DecisionCenterPage() {
                       </span>
                       <Badge variant={priorityVariant(pri)}>{pri}</Badge>
                       <Badge variant="outline">{issue.category}</Badge>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusColors[status] || statusColors.IDENTIFIED}`}>
+                        Status: {status.replace("_", " ")}
+                      </span>
                     </div>
                     <h4 className="text-base md:text-lg font-bold text-white tracking-tight">
                       {issueTitle(issue.issue_key)}
@@ -449,7 +523,7 @@ export default function DecisionCenterPage() {
                   ))}
                 </div>
 
-                <div className="rounded-xl bg-[#0E1424]/80 border border-white/[0.04] px-4 py-3">
+                <div className="rounded-xl bg-[#0E1424]/80 border border-white/[0.04] px-4 py-3 mb-4">
                   <p className="text-[10px] uppercase tracking-[0.08em] text-slate-600 font-bold mb-1.5">
                     Recommendation
                   </p>
@@ -457,7 +531,81 @@ export default function DecisionCenterPage() {
                     {recommendationFor(issue, rank, dashboard.ai_recommendation)}
                   </p>
                 </div>
-              </button>
+
+                {/* ── Business Action Controls ───────────────────────── */}
+                <div className="flex items-center justify-between gap-3 pt-3 border-t border-white/5 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => handleOpenActionModal(issue, e)}
+                      className="px-3.5 py-1.5 rounded-xl bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs font-bold transition-all shadow-md"
+                    >
+                      🛠️ Mark Action
+                    </button>
+                    {(status === "ACTION_TAKEN" || status === "REOPENED") && (
+                      <button
+                        type="button"
+                        onClick={(e) => handleSendFollowups(issue.issue_key, e)}
+                        disabled={sendingFollowup}
+                        className="px-3.5 py-1.5 rounded-xl bg-purple-600/80 hover:bg-purple-600 text-white text-xs font-bold transition-all shadow-md disabled:opacity-50"
+                      >
+                        📩 Send Follow-up Request
+                      </button>
+                    )}
+                  </div>
+                  {impact?.action_taken && (
+                    <p className="text-xs text-indigo-300 font-semibold truncate max-w-xs">
+                      Action: "{impact.action_taken}"
+                    </p>
+                  )}
+                </div>
+
+                {/* ── Reopened Warning Alert ─────────────────────────── */}
+                {impact?.is_reopened && (
+                  <div className="mt-4 p-3.5 rounded-2xl bg-red-500/15 border border-red-500/30 text-xs text-red-300 font-semibold space-y-1">
+                    <div className="flex items-center gap-2 text-red-400 font-bold">
+                      <span>⚠️ REOPENED</span>
+                      <span>— Improvement: {impact.improvement_percentage}%</span>
+                    </div>
+                    <p className="text-[11px] text-red-300/90 font-normal leading-relaxed">
+                      Action taken, but customer feedback indicates the issue may not be fully resolved.
+                    </p>
+                  </div>
+                )}
+
+                {/* ── Resolution Impact Panel ────────────────────────── */}
+                {impact && impact.contacted_count > 0 && (
+                  <div className="mt-4 p-4 rounded-2xl bg-[#0b0d18] border border-white/8 space-y-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-300 uppercase tracking-wider text-[10px]">
+                        Resolution Impact
+                      </span>
+                      <span className="text-emerald-400 font-bold font-mono">
+                        {impact.improvement_percentage}% Overall Improvement
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                      <div className="p-2 rounded-xl bg-white/4 border border-white/5">
+                        <p className="text-[10px] text-slate-500 font-semibold">Contacted</p>
+                        <p className="font-bold font-mono text-slate-200 mt-0.5">{impact.contacted_count}</p>
+                      </div>
+                      <div className="p-2 rounded-xl bg-white/4 border border-white/5">
+                        <p className="text-[10px] text-slate-500 font-semibold">Responses</p>
+                        <p className="font-bold font-mono text-slate-200 mt-0.5">{impact.response_count} ({impact.response_rate}%)</p>
+                      </div>
+                      <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                        <p className="text-[10px] text-emerald-400 font-semibold">Improved</p>
+                        <p className="font-bold font-mono text-emerald-300 mt-0.5">{impact.improved_count}</p>
+                      </div>
+                      <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                        <p className="text-[10px] text-amber-400 font-semibold">Somewhat / Not</p>
+                        <p className="font-bold font-mono text-amber-300 mt-0.5">{impact.somewhat_improved_count} / {impact.not_improved_count}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
@@ -736,6 +884,50 @@ export default function DecisionCenterPage() {
           </Button>
         </div>
       </section>
+
+      {/* ── Take Action Modal Overlay ─────────────────────────────────── */}
+      {actionModalOpen && actionIssue && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0d0f1a] border border-white/10 rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-white/8 pb-4">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-400">Take Action</p>
+                <h3 className="text-lg font-bold text-slate-100">{issueTitle(actionIssue.issue_key)}</h3>
+              </div>
+              <button onClick={() => setActionModalOpen(false)} className="text-slate-400 hover:text-white text-lg">✕</button>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-white/4 border border-white/5 flex items-center justify-between text-xs font-mono">
+              <span className="text-slate-400 font-semibold">Priority Rank</span>
+              <span className="text-amber-400 font-bold">#{actionIssue.priority_rank || 1} · Score: {Math.round(actionIssue.priority_score || 90)}/100</span>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-300">
+                What action did your business take?
+              </label>
+              <textarea
+                value={actionInput}
+                onChange={(e) => setActionInput(e.target.value)}
+                placeholder="e.g. Opened 2 additional checkout counters"
+                rows={3}
+                maxLength={1000}
+                className="w-full bg-[#161827] border border-white/10 rounded-2xl p-3.5 text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 transition-all resize-none"
+              />
+              <p className="text-[10px] text-slate-500">
+                Record real-world operational changes. RoadmapAI will log this action and make it eligible for customer follow-up.
+              </p>
+            </div>
+
+            <div className="flex gap-3 justify-end pt-2">
+              <Button variant="ghost" onClick={() => setActionModalOpen(false)}>Cancel</Button>
+              <Button onClick={handleSaveAction} disabled={!actionInput.trim() || savingAction}>
+                {savingAction ? "Saving..." : "Save Action"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </WorkspacePage>
   );
 }
