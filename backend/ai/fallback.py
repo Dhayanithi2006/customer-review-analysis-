@@ -111,26 +111,29 @@ class FallbackEngine:
 
 def CategorizedReview_fallback(index: int, text: str) -> CategorizationItem:
     lower = text.lower()
-    if any(k in lower for k in ["bug", "error", "fail", "crash", "broken"]):
-        cat, area, sev = "Bug", "Core Feature", 8
+    if any(k in lower for k in ["pay", "payment", "transaction", "upi", "refund", "money deducted"]):
+        cat, area, sev, key = "payment", "Billing", 5, "payment_failure"
+    elif any(k in lower for k in ["bug", "error", "fail", "crash", "broken"]):
+        cat, area, sev, key = "bug", "Core Feature", 4, "app_crash"
     elif any(k in lower for k in ["slow", "lag", "delay", "freeze"]):
-        cat, area, sev = "Performance", "UI", 6
-    elif any(k in lower for k in ["price", "cost", "pay", "charge", "subscription"]):
-        cat, area, sev = "Pricing", "Billing", 7
+        cat, area, sev, key = "performance", "UI", 3, "slow_performance"
+    elif any(k in lower for k in ["price", "cost", "charge", "subscription"]):
+        cat, area, sev, key = "pricing", "Billing", 3, "pricing_concern"
     elif any(k in lower for k in ["wish", "would love", "add", "feature", "want"]):
-        cat, area, sev = "Feature Request", "Core Feature", 4
+        cat, area, sev, key = "feature_request", "Core Feature", 2, "feature_request"
+    elif any(k in lower for k in ["staff", "support", "service", "rude"]):
+        cat, area, sev, key = "service", "Other", 3, "service_quality"
     else:
-        cat, area, sev = "UX", "UI", 5
-
-    words = [w.upper() for w in re.findall(r"\w+", text) if len(w) > 3][:3]
-    key = "_".join(words) if words else "GENERAL_ISSUE"
+        words = [w.lower() for w in re.findall(r"\w+", text) if len(w) > 3][:3]
+        key = "_".join(words) if words else "general_issue"
+        cat, area, sev = "ux", "UI", 2
 
     return CategorizationItem(
         review_index=index,
         issue_key=key,
         category=cat,
         severity=sev,
-        confidence=60,
+        confidence=0.35,
         summary=text[:60],
         business_area=area
     )

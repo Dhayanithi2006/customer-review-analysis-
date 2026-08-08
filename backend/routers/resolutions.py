@@ -12,10 +12,11 @@ Statuses Supported:
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, List
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Request, Header
 from pydantic import BaseModel, Field
 from database import get_db
 from core.logging import get_logger
+from core.ownership import assert_business_owner
 
 logger = get_logger("routers.resolutions")
 router = APIRouter(tags=["Feedback Closure"])
@@ -60,16 +61,17 @@ class PublicUpdatesResponse(BaseModel):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/business/{business_id}/resolutions")
-async def list_workspace_resolutions(business_id: str):
+async def list_workspace_resolutions(
+    business_id: str,
+    request: Request,
+    x_owner_token: Optional[str] = Header(None),
+):
     """
     Workspace endpoint — returns all issue resolutions for a business.
     Used by business owner in Decision Center / Roadmap management UI.
     """
     db = get_db()
-
-    biz = db.table("businesses").select("id").eq("id", business_id).execute().data
-    if not biz:
-        raise HTTPException(status_code=404, detail="Business not found.")
+    assert_business_owner(business_id, request=request, x_owner_token=x_owner_token, db=db)
 
     res = (
         db.table("issue_resolutions")
@@ -83,15 +85,17 @@ async def list_workspace_resolutions(business_id: str):
 
 
 @router.post("/business/{business_id}/resolutions")
-async def create_or_update_resolution(business_id: str, body: CreateResolutionRequest):
+async def create_or_update_resolution(
+    business_id: str,
+    body: CreateResolutionRequest,
+    request: Request,
+    x_owner_token: Optional[str] = Header(None),
+):
     """
     Workspace endpoint — creates or updates an issue resolution.
     """
     db = get_db()
-
-    biz = db.table("businesses").select("id").eq("id", business_id).execute().data
-    if not biz:
-        raise HTTPException(status_code=404, detail="Business not found.")
+    assert_business_owner(business_id, request=request, x_owner_token=x_owner_token, db=db)
 
     if body.status not in VALID_STATUSES:
         raise HTTPException(
@@ -159,11 +163,18 @@ async def create_or_update_resolution(business_id: str, body: CreateResolutionRe
 
 
 @router.patch("/business/{business_id}/resolutions/{resolution_id}")
-async def update_resolution(business_id: str, resolution_id: str, body: UpdateResolutionRequest):
+async def update_resolution(
+    business_id: str,
+    resolution_id: str,
+    body: UpdateResolutionRequest,
+    request: Request,
+    x_owner_token: Optional[str] = Header(None),
+):
     """
     Workspace endpoint — update issue status, resolution message, or visibility.
     """
     db = get_db()
+    assert_business_owner(business_id, request=request, x_owner_token=x_owner_token, db=db)
 
     updates = {}
     if body.status is not None:

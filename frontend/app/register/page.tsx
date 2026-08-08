@@ -18,7 +18,6 @@ import {
   FileSpreadsheet,
   QrCode,
   Mail,
-  Star,
   CircleDollarSign,
 } from "lucide-react";
 import { registerBusiness } from "@/lib/business-api";
@@ -35,20 +34,27 @@ const INDUSTRIES: { value: string; icon: ReactNode; group: string }[] = [
   { value: "E-commerce", icon: <ShoppingCart className="size-4" />, group: "digital" },
   { value: "Hospital", icon: <Building2 className="size-4" />, group: "physical" },
   { value: "School", icon: <GraduationCap className="size-4" />, group: "physical" },
+  { value: "University", icon: <GraduationCap className="size-4" />, group: "physical" },
+  { value: "Institute", icon: <GraduationCap className="size-4" />, group: "physical" },
   { value: "Hostel", icon: <Home className="size-4" />, group: "physical" },
   { value: "Supermarket", icon: <Store className="size-4" />, group: "physical" },
   { value: "Restaurant", icon: <UtensilsCrossed className="size-4" />, group: "physical" },
   { value: "Hotel", icon: <Hotel className="size-4" />, group: "physical" },
+  { value: "Shop", icon: <Store className="size-4" />, group: "physical" },
   { value: "Bank", icon: <Landmark className="size-4" />, group: "physical" },
 ];
 
-const FEEDBACK_METHODS: { value: string; icon: ReactNode; label: string; desc: string }[] = [
-  { value: "none", icon: <Ban className="size-4" />, label: "None", desc: "I don't collect feedback yet" },
-  { value: "app_store", icon: <Smartphone className="size-4" />, label: "App Store", desc: "App Store or Play Store reviews" },
-  { value: "csv", icon: <FileSpreadsheet className="size-4" />, label: "CSV / Export", desc: "I have an export file ready" },
-  { value: "qr", icon: <QrCode className="size-4" />, label: "QR Code", desc: "Physical location QR forms" },
-  { value: "email", icon: <Mail className="size-4" />, label: "Email", desc: "Email surveys or support threads" },
-  { value: "google_reviews", icon: <Star className="size-4" />, label: "Google Reviews", desc: "Google Business reviews" },
+const FEEDBACK_METHODS: {
+  value: string;
+  icon: ReactNode;
+  label: string;
+  desc: string;
+  category: "A" | "B" | "none";
+}[] = [
+  { value: "none", icon: <Ban className="size-4" />, label: "None yet", desc: "I don’t collect feedback yet", category: "none" },
+  { value: "qr", icon: <QrCode className="size-4" />, label: "QR Code", desc: "Printable QR → feedback form", category: "A" },
+  { value: "csv", icon: <FileSpreadsheet className="size-4" />, label: "CSV / Export", desc: "Existing surveys & exports", category: "B" },
+  { value: "email", icon: <Mail className="size-4" />, label: "Email", desc: "Support threads (import later via CSV)", category: "B" },
 ];
 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP", "SGD", "AED"];
@@ -191,7 +197,9 @@ function Step2({
         <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">
           How do you currently collect customer feedback?
         </label>
-        <p className="text-[11px] text-slate-600 mb-3">This helps us tailor your onboarding experience.</p>
+        <p className="text-[11px] text-slate-600 mb-3">
+          QR / direct form collect new feedback. CSV covers existing surveys and exports.
+        </p>
         <div className="flex flex-col gap-2">
           {FEEDBACK_METHODS.map(fm => (
             <button
@@ -206,8 +214,16 @@ function Step2({
               }`}
             >
               <span className="text-primary-soft shrink-0" aria-hidden>{fm.icon}</span>
-              <div>
-                <p className={`text-xs font-semibold ${feedbackMethod === fm.value ? "text-slate-100" : "text-slate-300"}`}>{fm.label}</p>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className={`text-xs font-semibold ${feedbackMethod === fm.value ? "text-slate-100" : "text-slate-300"}`}>{fm.label}</p>
+                  {fm.category === "A" && (
+                    <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">Cat A</span>
+                  )}
+                  {fm.category === "B" && (
+                    <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-sky-500/10 text-sky-300 border border-sky-500/20">Cat B</span>
+                  )}
+                </div>
                 <p className="text-[11px] text-slate-500">{fm.desc}</p>
               </div>
               {feedbackMethod === fm.value && (
@@ -302,8 +318,6 @@ function Step2({
 // ─── Step 3: Workspace Created — Success Card ────────────────────────────────
 
 function Step3Success({ biz }: { biz: BusinessResponse }) {
-  const isPhysical = ["Hospital", "School", "Hostel", "Supermarket", "Restaurant", "Hotel", "Bank"].includes(biz.industry);
-
   return (
     <div>
       {/* Success banner */}
@@ -353,8 +367,8 @@ function Step3Success({ biz }: { biz: BusinessResponse }) {
           ))}
         </div>
 
-        {/* QR Code preview (physical only) */}
-        {isPhysical && biz.qr_code && (
+        {/* QR Code — always shown when generated */}
+        {biz.qr_code && (
           <div className="px-5 py-4 border-t border-white/6">
             <p className="text-[10px] text-slate-600 uppercase tracking-wider font-bold mb-3">QR Code — Feedback Collection</p>
             <div className="flex items-center gap-5">
@@ -368,7 +382,7 @@ function Step3Success({ biz }: { biz: BusinessResponse }) {
               </div>
               <div className="flex flex-col gap-2">
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Print and display at your location. Customers scan to leave feedback instantly.
+                  Encodes your business-specific feedback URL. Customers scan to leave feedback instantly.
                 </p>
                 <a
                   id="btn-download-qr"

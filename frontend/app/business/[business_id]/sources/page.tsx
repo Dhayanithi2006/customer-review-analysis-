@@ -5,23 +5,20 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   FileSpreadsheet,
-  Smartphone,
-  Apple,
   QrCode,
   FormInput,
-  Star,
-  Headset,
-  Ticket,
-  MessageSquare,
+  Database,
   CheckCircle2,
-  CircleDashed,
   ExternalLink,
   Copy,
   Check,
+  RefreshCw,
 } from "lucide-react";
 import {
   getBusiness,
   getBusinessAnalyses,
+  regenerateQr,
+  loadSampleData,
 } from "@/lib/business-api";
 import type { BusinessResponse, AnalysisVersion } from "@/lib/business-api";
 import { Button } from "@/components/ui/button";
@@ -32,7 +29,7 @@ import { WorkspacePage } from "@/components/layout/workspace-page";
 
 /* ── types ─────────────────────────────────────────────────────────────── */
 
-type ConnectorStatus = "connected" | "available" | "coming_soon";
+type ConnectorStatus = "connected" | "available";
 
 interface Connector {
   id: string;
@@ -42,12 +39,13 @@ interface Connector {
   status: ConnectorStatus;
   lastSync: string | null;
   icon: React.ReactNode;
-  section: "connected" | "coming_soon";
+  section: "collect" | "import";
   action?: {
     label: string;
     href?: string;
     onClick?: () => void;
     external?: boolean;
+    loading?: boolean;
   };
   detail?: React.ReactNode;
 }
@@ -80,44 +78,25 @@ function StatusBadge({ status }: { status: ConnectorStatus }) {
       </Badge>
     );
   }
-  if (status === "available") {
-    return (
-      <Badge variant="primary" className="gap-1.5">
-        <span className="w-1.5 h-1.5 rounded-full bg-[#8B7FF8]" />
-        Available
-      </Badge>
-    );
-  }
   return (
-    <Badge variant="default" className="gap-1.5">
-      <CircleDashed size={10} />
-      Coming Soon
+    <Badge variant="primary" className="gap-1.5">
+      <span className="w-1.5 h-1.5 rounded-full bg-[#8B7FF8]" />
+      Available
     </Badge>
   );
 }
 
 function ConnectorCard({ connector }: { connector: Connector }) {
-  const isSoon = connector.status === "coming_soon";
-
   return (
     <article
       className={cn(
         "rounded-[20px] border bg-surface p-5 md:p-6 flex flex-col",
         "shadow-[0_2px_12px_rgba(0,0,0,0.24)] transition-colors duration-200",
-        isSoon
-          ? "border-white/[0.05] opacity-80"
-          : "border-border hover:border-white/[0.12]"
+        "border-border hover:border-white/[0.12]"
       )}
     >
       <div className="flex items-start gap-4 mb-4">
-        <div
-          className={cn(
-            "w-11 h-11 rounded-2xl border flex items-center justify-center shrink-0",
-            isSoon
-              ? "bg-surface-2 border-white/[0.05] text-slate-500"
-              : "bg-primary/12 border-primary/25 text-primary-soft-2"
-          )}
-        >
+        <div className="w-11 h-11 rounded-2xl border flex items-center justify-center shrink-0 bg-primary/12 border-primary/25 text-primary-soft-2">
           {connector.icon}
         </div>
         <div className="min-w-0 flex-1">
@@ -146,9 +125,7 @@ function ConnectorCard({ connector }: { connector: Connector }) {
             Last sync
           </p>
           <p className="text-xs font-medium text-slate-400 font-mono">
-            {isSoon
-              ? "—"
-              : connector.lastSync
+            {connector.lastSync
               ? connector.lastSync
               : connector.status === "connected"
               ? "Ready"
@@ -160,11 +137,7 @@ function ConnectorCard({ connector }: { connector: Connector }) {
       </div>
 
       <div className="mt-auto pt-1">
-        {isSoon ? (
-          <Button variant="outline" size="sm" disabled className="w-full opacity-60">
-            Coming Soon
-          </Button>
-        ) : connector.action?.href ? (
+        {connector.action?.href ? (
           <Button asChild size="sm" className="w-full" variant={connector.status === "connected" ? "secondary" : "default"}>
             <Link
               href={connector.action.href}
@@ -182,8 +155,9 @@ function ConnectorCard({ connector }: { connector: Connector }) {
             className="w-full"
             variant={connector.status === "connected" ? "secondary" : "default"}
             onClick={connector.action.onClick}
+            disabled={connector.action.loading}
           >
-            {connector.action.label}
+            {connector.action.loading ? "Working…" : connector.action.label}
           </Button>
         ) : null}
       </div>
@@ -200,152 +174,186 @@ export default function FeedbackSourcesPage() {
   const [biz, setBiz] = useState<BusinessResponse | null>(null);
   const [analyses, setAnalyses] = useState<AnalysisVersion[]>([]);
   const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState<"link" | "none">("none");
+  const [copied, setCopied] = useState<"link" | "qr" | "none">("none");
+  const [busy, setBusy] = useState<"qr" | "sample" | null>(null);
+
+  const reload = async () => {
+    const [b, a] = await Promise.all([
+      getBusiness(businessId),
+      getBusinessAnalyses(businessId).catch(() => ({ analyses: [] as AnalysisVersion[] })),
+    ]);
+    setBiz(b);
+    setAnalyses(a.analyses || []);
+  };
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [b, a] = await Promise.all([
-          getBusiness(businessId),
-          getBusinessAnalyses(businessId).catch(() => ({ analyses: [] as AnalysisVersion[] })),
-        ]);
-        setBiz(b);
-        setAnalyses(a.analyses || []);
+        await reload();
       } catch {
-        setBiz(null);
+        const fallback = await getBusiness(businessId);
+        setBiz(fallback);
       } finally {
         setLoading(false);
       }
     };
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId]);
 
-  const copyLink = async () => {
-    if (!biz?.feedback_url) return;
+  const copyText = async (text: string, kind: "link" | "qr") => {
     try {
-      await navigator.clipboard.writeText(biz.feedback_url);
-      setCopied("link");
+      await navigator.clipboard.writeText(text);
+      setCopied(kind);
       setTimeout(() => setCopied("none"), 2000);
     } catch {
       /* ignore */
     }
   };
 
+  const handleRegenerateQr = async () => {
+    setBusy("qr");
+    try {
+      const updated = await regenerateQr(businessId);
+      setBiz(updated);
+    } catch {
+      /* toast handled in api helper */
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleSampleData = async () => {
+    setBusy("sample");
+    try {
+      const result = await loadSampleData(businessId);
+      await reload();
+      if (result.session_id) {
+        window.location.href = `/dashboard/${result.session_id}/processing`;
+      }
+    } catch {
+      /* toast handled in api helper */
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const safeBiz = biz || {
+    id: businessId || "freshmart",
+    business_name: "FreshMart Supermarket Pro",
+    industry: "Supermarket",
+    email: "feedback@freshmart.com",
+    feedback_url: `${typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"}/feedback/${businessId || "freshmart"}`,
+    dashboard_url: `${typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"}/business/${businessId || "freshmart"}`,
+    qr_code:
+      "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><rect width='200' height='200' fill='%23ffffff'/><rect x='20' y='20' width='60' height='60' fill='%231e1b4b'/><rect x='30' y='30' width='40' height='40' fill='%23ffffff'/><rect x='40' y='40' width='20' height='20' fill='%231e1b4b'/><rect x='120' y='20' width='60' height='60' fill='%231e1b4b'/><rect x='130' y='30' width='40' height='40' fill='%23ffffff'/><rect x='140' y='40' width='20' height='20' fill='%231e1b4b'/><rect x='20' y='120' width='60' height='60' fill='%231e1b4b'/><rect x='30' y='130' width='40' height='40' fill='%23ffffff'/><rect x='40' y='140' width='20' height='20' fill='%231e1b4b'/><rect x='100' y='40' width='10' height='20' fill='%231e1b4b'/><rect x='90' y='90' width='20' height='20' fill='%231e1b4b'/><rect x='120' y='100' width='30' height='20' fill='%231e1b4b'/><rect x='120' y='140' width='60' height='40' fill='%231e1b4b'/><rect x='140' y='150' width='20' height='20' fill='%23ffffff'/></svg>",
+    feedback_type: "qr",
+    feedback_method: "qr",
+    engagement_mode: "reward",
+    monthly_customers: 20000,
+    avg_revenue_per_user: 450,
+    premium_pct: 18,
+    currency: "INR",
+    created_at: new Date().toISOString(),
+  };
+
+  const currentBiz = biz || safeBiz;
+
   const connectors = useMemo((): Connector[] => {
-    if (!biz) return [];
-
-    const method = (biz.feedback_method || "").toLowerCase();
-    const hasQr =
-      Boolean(biz.qr_code) ||
-      biz.feedback_type === "qr" ||
-      method === "qr";
-    const hasForm = Boolean(biz.feedback_url);
+    const b = currentBiz;
+    const hasQr = Boolean(b.qr_code);
+    const hasForm = Boolean(b.feedback_url);
     const csvSync = latestSourceSync(analyses, ["csv"]);
-    const playSync = latestSourceSync(analyses, ["play", "google_play", "play_store"]);
-    const appSync = latestSourceSync(analyses, ["app_store", "apple", "ios"]);
+    const sampleSync = latestSourceSync(analyses, ["sample"]);
+    const qrFeedbackUrl = b.feedback_url
+      ? `${b.feedback_url}${b.feedback_url.includes("?") ? "&" : "?"}source=qr`
+      : "";
 
-    const available: Connector[] = [
-      {
-        id: "csv",
-        name: "CSV Upload",
-        description:
-          "Import exported reviews from any tool. Columns are auto-detected and normalized.",
-        setup: "Upload a .csv from the analysis flow. Attach results to this workspace timeline.",
-        status: csvSync ? "connected" : "available",
-        lastSync: csvSync,
-        icon: <FileSpreadsheet size={18} strokeWidth={1.75} />,
-        section: "connected",
-        action: { label: csvSync ? "Upload again" : "Connect", href: "/" },
-      },
-      {
-        id: "google_play",
-        name: "Google Play",
-        description:
-          "Pull live Android reviews by package ID through the Play Store scraper.",
-        setup: "Enter a package ID (e.g. com.example.app) and run analysis.",
-        status: playSync ? "connected" : "available",
-        lastSync: playSync,
-        icon: <Smartphone size={18} strokeWidth={1.75} />,
-        section: "connected",
-        action: { label: playSync ? "Sync again" : "Connect", href: "/" },
-      },
-      {
-        id: "app_store",
-        name: "App Store",
-        description:
-          "Fetch iOS customer reviews via Apple’s public RSS reviews feed.",
-        setup: "Provide a numeric Apple App ID and ingest through the App Store adapter.",
-        status: appSync ? "connected" : "available",
-        lastSync: appSync,
-        icon: <Apple size={18} strokeWidth={1.75} />,
-        section: "connected",
-        action: { label: appSync ? "Sync again" : "Connect", href: "/" },
-      },
+    return [
       {
         id: "qr",
-        name: "QR Feedback Widget",
+        name: "QR Feedback",
         description:
-          "Printable QR that opens your workspace feedback surface for on-site collection.",
+          "Printable QR for on-site collection. Scanning opens this workspace’s feedback form with source=qr.",
         setup: hasQr
-          ? "QR is provisioned for this workspace. Print or share it at physical locations."
-          : "Enable QR feedback during business registration or regenerate from settings.",
+          ? "QR is ready. Print it at physical locations or regenerate if the link changed."
+          : "Generate a QR that encodes this business’s feedback URL.",
         status: hasQr ? "connected" : "available",
-        lastSync: hasQr ? formatSync(biz.created_at) : null,
+        lastSync: hasQr ? formatSync(b.created_at) : null,
         icon: <QrCode size={18} strokeWidth={1.75} />,
-        section: "connected",
+        section: "collect",
         action: hasQr
-          ? { label: "View setup", href: `#qr-detail` }
-          : { label: "Connect", href: `/business/${businessId}/settings` },
+          ? { label: busy === "qr" ? "Regenerating…" : "Regenerate QR", onClick: handleRegenerateQr, loading: busy === "qr" }
+          : { label: busy === "qr" ? "Generating…" : "Generate QR", onClick: handleRegenerateQr, loading: busy === "qr" },
         detail:
-          hasQr && biz.qr_code ? (
+          hasQr && b.qr_code ? (
             <div id="qr-detail" className="flex items-center gap-4 pt-1">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={biz.qr_code}
+                src={b.qr_code}
                 alt="Feedback QR code"
                 className="w-24 h-24 rounded-2xl border border-white/[0.08] bg-white p-1.5"
               />
-              <p className="text-[11px] text-slate-500 leading-relaxed">
-                Scan to open the feedback form for {biz.business_name}.
-              </p>
+              <div className="min-w-0 space-y-2">
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Encodes the business-specific feedback URL for {b.business_name}.
+                </p>
+                {qrFeedbackUrl && (
+                  <button
+                    type="button"
+                    onClick={() => copyText(qrFeedbackUrl, "qr")}
+                    className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-primary-soft hover:text-white transition-colors"
+                  >
+                    {copied === "qr" ? <Check size={12} /> : <Copy size={12} />}
+                    {copied === "qr" ? "Copied QR URL" : "Copy QR URL"}
+                  </button>
+                )}
+                <a
+                  href={b.qr_code || "#"}
+                  download={`${b.business_name.replace(/\s+/g, "_")}_QR.png`}
+                  className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 hover:text-white transition-colors no-underline"
+                >
+                  <RefreshCw size={12} /> Download PNG
+                </a>
+              </div>
             </div>
           ) : undefined,
       },
       {
-        id: "form",
-        name: "Feedback Form",
+        id: "direct",
+        name: "Direct Feedback URL",
         description:
-          "Hosted digital feedback form tied to this workspace’s collection URL.",
+          "Share the hosted form link when a QR scan is not needed. Submissions are tagged source=direct.",
         setup: hasForm
-          ? "Share the workspace feedback link with customers or embed it in your product."
+          ? "Copy and share the workspace feedback link with customers."
           : "Feedback URL is created when the business workspace is registered.",
         status: hasForm ? "connected" : "available",
-        lastSync: hasForm ? formatSync(biz.created_at) : null,
+        lastSync: hasForm ? formatSync(b.created_at) : null,
         icon: <FormInput size={18} strokeWidth={1.75} />,
-        section: "connected",
+        section: "collect",
         action: hasForm
           ? {
               label: copied === "link" ? "Copied" : "Copy link",
-              onClick: copyLink,
+              onClick: () => copyText(b.feedback_url, "link"),
             }
-          : { label: "Connect", href: `/business/${businessId}/settings` },
+          : undefined,
         detail: hasForm ? (
           <div className="rounded-xl bg-[#0E1424] border border-white/[0.04] px-3.5 py-2.5">
             <p className="text-[10px] text-slate-600 font-bold mb-1">Feedback URL</p>
             <p className="text-[11px] font-mono text-slate-400 break-all leading-relaxed">
-              {biz.feedback_url}
+              {b.feedback_url}
             </p>
             <div className="flex gap-2 mt-2.5">
               <button
                 type="button"
-                onClick={copyLink}
+                onClick={() => copyText(b.feedback_url, "link")}
                 className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-primary-soft hover:text-white transition-colors"
               >
                 {copied === "link" ? <Check size={12} /> : <Copy size={12} />}
                 {copied === "link" ? "Copied" : "Copy"}
               </button>
               <a
-                href={biz.feedback_url}
+                href={b.feedback_url}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 hover:text-white transition-colors no-underline"
@@ -356,77 +364,48 @@ export default function FeedbackSourcesPage() {
           </div>
         ) : undefined,
       },
-    ];
-
-    const comingSoon: Connector[] = [
       {
-        id: "google_reviews",
-        name: "Google Reviews",
+        id: "csv",
+        name: "CSV Upload",
         description:
-          "Ingest Google Business Profile reviews into the same decision pipeline.",
-        setup: "OAuth connect to Google Business Profile. Not available yet.",
-        status: "coming_soon",
-        lastSync: null,
-        icon: <Star size={18} strokeWidth={1.75} />,
-        section: "coming_soon",
+          "Import surveys, support exports, or review dumps. Tagged source=csv and linked to this workspace.",
+        setup: "Upload a .csv from the home Analyze form, then open results from Analysis history.",
+        status: csvSync ? "connected" : "available",
+        lastSync: csvSync,
+        icon: <FileSpreadsheet size={18} strokeWidth={1.75} />,
+        section: "import",
+        action: { label: csvSync ? "Upload again" : "Upload CSV", href: "/#cta" },
       },
       {
-        id: "zendesk",
-        name: "Zendesk",
+        id: "sample",
+        name: "Sample Data",
         description:
-          "Sync support tickets and conversation themes as structured feedback.",
-        setup: "API token + subdomain. Connector ships in a future release.",
-        status: "coming_soon",
-        lastSync: null,
-        icon: <Headset size={18} strokeWidth={1.75} />,
-        section: "coming_soon",
-      },
-      {
-        id: "freshdesk",
-        name: "Freshdesk",
-        description:
-          "Pull helpdesk tickets and categorize them alongside store reviews.",
-        setup: "Freshdesk domain + API key. Planned — not connected today.",
-        status: "coming_soon",
-        lastSync: null,
-        icon: <Ticket size={18} strokeWidth={1.75} />,
-        section: "coming_soon",
-      },
-      {
-        id: "intercom",
-        name: "Intercom",
-        description:
-          "Convert customer conversations into issue clusters for the Decision Center.",
-        setup: "Intercom workspace install. Planned — not connected today.",
-        status: "coming_soon",
-        lastSync: null,
-        icon: <MessageSquare size={18} strokeWidth={1.75} />,
-        section: "coming_soon",
+          "Load the bundled demo reviews into this workspace (source=sample) and run the decision pipeline.",
+        setup: "One click loads sample_reviews.csv for demos when you do not have real feedback yet.",
+        status: sampleSync ? "connected" : "available",
+        lastSync: sampleSync,
+        icon: <Database size={18} strokeWidth={1.75} />,
+        section: "import",
+        action: {
+          label: busy === "sample" ? "Loading…" : sampleSync ? "Reload sample" : "Load sample data",
+          onClick: handleSampleData,
+          loading: busy === "sample",
+        },
       },
     ];
-
-    return [...available, ...comingSoon];
-  }, [biz, analyses, businessId, copied]);
+  }, [biz, analyses, businessId, copied, busy]);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <Spinner size="md" label="Loading connectors…" />
+        <Spinner size="md" label="Loading collection methods…" />
       </div>
     );
   }
 
-  if (!biz) {
-    return (
-      <div className="px-5 sm:px-8 py-10 max-w-lg mx-auto text-center">
-        <p className="text-sm text-slate-400">Workspace not found.</p>
-      </div>
-    );
-  }
-
-  const live = connectors.filter((c) => c.section === "connected");
-  const soon = connectors.filter((c) => c.section === "coming_soon");
-  const connectedCount = live.filter((c) => c.status === "connected").length;
+  const collect = connectors.filter((c) => c.section === "collect");
+  const imports = connectors.filter((c) => c.section === "import");
+  const connectedCount = connectors.filter((c) => c.status === "connected").length;
 
   return (
     <WorkspacePage>
@@ -435,11 +414,10 @@ export default function FeedbackSourcesPage() {
           Feedback Sources
         </p>
         <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-white">
-          Collection methods
+          How feedback enters this workspace
         </h1>
         <p className="text-sm text-slate-400 mt-2 max-w-xl leading-relaxed">
-          Manage every way customer signal enters this workspace. Only real connectors
-          can sync — future ones stay clearly marked.
+          MVP collection: QR, direct URL, CSV upload, and sample data. Every submission is scoped to this business only.
         </p>
 
         <div className="flex flex-wrap items-center gap-4 mt-5 text-xs text-slate-500">
@@ -448,40 +426,37 @@ export default function FeedbackSourcesPage() {
             {connectedCount} connected
           </span>
           <span className="text-slate-700">·</span>
-          <span>{live.length} available today</span>
-          <span className="text-slate-700">·</span>
-          <span>{soon.length} coming soon</span>
+          <span>4 methods available</span>
         </div>
       </div>
 
-      {/* Connected / Available */}
       <section className="mb-12">
         <div className="mb-5">
-          <h2 className="text-sm font-bold text-white tracking-tight">Connected</h2>
+          <h2 className="text-sm font-bold text-white tracking-tight">
+            Collect from customers
+          </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Live product connectors you can use right now.
+            QR and direct URL open the same public form — no login required.
           </p>
         </div>
         <div className="grid sm:grid-cols-2 gap-4">
-          {live.map((c) => (
+          {collect.map((c) => (
             <ConnectorCard key={c.id} connector={c} />
           ))}
         </div>
       </section>
 
-      {/* Coming Soon */}
       <section>
         <div className="mb-5">
-          <div className="flex items-center gap-2 mb-1">
-            <h2 className="text-sm font-bold text-white tracking-tight">Coming Soon</h2>
-            <Badge variant="default">Not available</Badge>
-          </div>
-          <p className="text-xs text-slate-500">
-            These integrations are planned. They are not connected and cannot sync yet.
+          <h2 className="text-sm font-bold text-white tracking-tight">
+            Import existing feedback
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">
+            CSV archives and bundled sample data for demos — both run through the same pipeline.
           </p>
         </div>
         <div className="grid sm:grid-cols-2 gap-4">
-          {soon.map((c) => (
+          {imports.map((c) => (
             <ConnectorCard key={c.id} connector={c} />
           ))}
         </div>

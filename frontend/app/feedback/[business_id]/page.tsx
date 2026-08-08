@@ -1,39 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 
 // ── Engagement mode themes & copywriting ──────────────────────────────────────
 const MODE_THEMES = {
   reward: {
-    gradient: "from-amber-500/10 via-orange-500/5 to-transparent",
-    accent:   "amber",
-    icon:     "🎁",
     ratingLabel: "How was your experience?",
     textPlaceholder: "Tell us what we can improve...",
     namePrompt: "Your name (optional)",
-    ctaLabel: "Submit Feedback & Earn Points",
-    ctaClass: "bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20",
+    ctaLabel: "Submit feedback",
   },
   improvement: {
-    gradient: "from-cyan-500/8 via-blue-500/5 to-transparent",
-    accent:   "cyan",
-    icon:     "💬",
     ratingLabel: "How was your experience today?",
-    textPlaceholder: "Tell us how we can serve you better. All feedback is confidential.",
+    textPlaceholder: "Tell us how we can serve you better.",
     namePrompt: "Your name (optional)",
-    ctaLabel: "Submit Feedback",
-    ctaClass: "bg-cyan-600 hover:bg-cyan-500 text-white shadow-lg shadow-cyan-600/20",
+    ctaLabel: "Submit feedback",
   },
   product: {
-    gradient: "from-indigo-500/10 via-violet-500/5 to-transparent",
-    accent:   "indigo",
-    icon:     "🚀",
     ratingLabel: "How was your experience?",
-    textPlaceholder: "What should we improve? What feature would you like to see next?",
+    textPlaceholder: "What should we improve?",
     namePrompt: "Your name (optional)",
-    ctaLabel: "Submit Product Feedback",
-    ctaClass: "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20",
+    ctaLabel: "Submit feedback",
   },
 } as const;
 
@@ -66,16 +54,19 @@ function StarRatingInput({ value, onChange }: { value: number; onChange: (v: num
   const labels = ["", "Terrible", "Poor", "Okay", "Good", "Excellent"];
   return (
     <div className="flex flex-col items-center gap-2">
-      <div className="flex gap-1.5">
-        {[1, 2, 3, 4, 5].map(star => (
+      <div className="flex gap-2" role="radiogroup" aria-label="Rating">
+        {[1, 2, 3, 4, 5].map((star) => (
           <button
             key={star}
             type="button"
+            role="radio"
+            aria-checked={value === star}
+            aria-label={`${star} star${star > 1 ? "s" : ""}`}
             onClick={() => onChange(star)}
             onMouseEnter={() => setHovered(star)}
             onMouseLeave={() => setHovered(0)}
-            className={`text-4xl sm:text-5xl transition-all duration-150 ${
-              star <= (hovered || value) ? "text-amber-400 scale-110" : "text-slate-700 hover:scale-105"
+            className={`text-3xl transition-colors ${
+              star <= (hovered || value) ? "text-amber-400" : "text-slate-600"
             }`}
           >
             ★
@@ -83,18 +74,21 @@ function StarRatingInput({ value, onChange }: { value: number; onChange: (v: num
         ))}
       </div>
       {(hovered || value) > 0 && (
-        <p className="text-xs font-bold text-amber-400 h-4 tracking-wide">
-          {labels[hovered || value]}
-        </p>
+        <p className="text-xs text-slate-400 h-4">{labels[hovered || value]}</p>
       )}
     </div>
   );
 }
 
-export default function FeedbackFormPage() {
-  const params     = useParams();
-  const router     = useRouter();
-  const businessId = params.business_id as string;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function FeedbackFormContent() {
+  const params       = useParams();
+  const router       = useRouter();
+  const searchParams = useSearchParams();
+  const businessId   = params.business_id as string;
+  const sourceParam  = (searchParams.get("source") || "").toLowerCase();
+  const feedbackSource: "qr" | "direct" = sourceParam === "qr" ? "qr" : "direct";
 
   const [config, setConfig]         = useState<FormConfig | null>(null);
   const [loading, setLoading]       = useState(true);
@@ -165,12 +159,21 @@ export default function FeedbackFormPage() {
 
     setErrorMsg(null);
     const trimmed = text.trim();
+    if (!trimmed) {
+      setErrorMsg("Please enter your feedback.");
+      return;
+    }
     if (trimmed.length < minChars) {
       setErrorMsg(`Please enter at least ${minChars} characters.`);
       return;
     }
-    if (config.requires_rating && rating === 0) {
-      setErrorMsg("Please select a star rating.");
+    if (rating < 1 || rating > 5) {
+      setErrorMsg("Please select a star rating (1–5).");
+      return;
+    }
+    const emailTrimmed = email.trim();
+    if (emailTrimmed && !EMAIL_RE.test(emailTrimmed)) {
+      setErrorMsg("Please enter a valid email address, or leave it blank.");
       return;
     }
 
@@ -181,11 +184,12 @@ export default function FeedbackFormPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text: trimmed,
-          rating: rating || undefined,
+          rating,
           customer_name: name.trim() || undefined,
-          customer_email: email.trim() || undefined,
+          customer_email: emailTrimmed || undefined,
           feedback_tag: selectedTag || undefined,
           user_token: userToken,
+          source: feedbackSource,
         }),
       });
 
@@ -214,204 +218,186 @@ export default function FeedbackFormPage() {
   };
 
   if (loading) return (
-    <div className="min-h-screen bg-[#07080d] flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-[#0d0f1a] border border-white/8 rounded-3xl p-8 space-y-6 text-center animate-pulse">
-        <div className="w-12 h-12 rounded-full bg-white/10 mx-auto" />
-        <div className="h-6 w-3/4 bg-white/10 rounded-lg mx-auto" />
-        <div className="h-4 w-1/2 bg-white/5 rounded mx-auto" />
-        <div className="h-32 bg-white/5 rounded-2xl" />
-        <div className="h-12 bg-white/10 rounded-2xl" />
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-8 animate-pulse space-y-4">
+        <div className="h-6 w-2/3 bg-white/10 rounded mx-auto" />
+        <div className="h-24 bg-white/5 rounded-xl" />
+        <div className="h-11 bg-white/10 rounded-xl" />
       </div>
     </div>
   );
 
   if (notFound || !config) return (
-    <div className="min-h-screen bg-[#07080d] flex items-center justify-center p-6">
-      <div className="max-w-md w-full text-center space-y-4">
-        <p className="text-5xl">📱</p>
-        <h1 className="text-xl font-bold text-slate-100">Feedback Form Unavailable</h1>
-        <p className="text-xs text-slate-400 leading-relaxed">
-          This feedback QR link could not be loaded. Please ask the staff for an updated QR code or link.
+    <div className="min-h-screen bg-background flex items-center justify-center p-6">
+      <div className="max-w-md w-full text-center space-y-3">
+        <h1 className="text-xl font-bold text-white">Feedback form unavailable</h1>
+        <p className="text-sm text-slate-400 leading-relaxed">
+          This link could not be loaded. Ask staff for an updated QR code or URL.
         </p>
       </div>
     </div>
   );
 
-  const mode  = config.engagement_mode;
+  const mode = config.engagement_mode;
   const theme = MODE_THEMES[mode] || MODE_THEMES.improvement;
-  const isValid = text.trim().length >= minChars && (!config.requires_rating || rating > 0);
+  const isValid = text.trim().length >= minChars && rating >= 1 && rating <= 5;
 
   return (
-    <div className="min-h-screen bg-[#07080d] relative text-slate-100 select-none">
-      {/* Ambient background gradient */}
-      <div className={`fixed inset-0 bg-gradient-to-br ${theme.gradient} pointer-events-none`} />
+    <div className="min-h-screen bg-background text-slate-100">
+      <div className="mx-auto max-w-md px-4 py-8 sm:py-12">
+        <header className="text-center mb-6 space-y-2">
+          <p className="text-xs font-semibold text-slate-400">{config.business_name}</p>
+          <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white">
+            {config.mode_headline}
+          </h1>
+          <p className="text-sm text-slate-400 leading-relaxed">
+            {config.mode_subtext}
+          </p>
+        </header>
 
-      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 py-8 sm:py-12">
-        <div className="w-full max-w-md sm:max-w-lg">
-
-          {/* Business Brand Header (Understandable in 3 Seconds) */}
-          <div className="text-center mb-6 sm:mb-8 space-y-2">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/6 border border-white/10 shadow-sm">
-              <span className="text-sm">{theme.icon}</span>
-              <span className="text-xs font-bold text-slate-200">{config.business_name}</span>
+        <form
+          onSubmit={handleSubmit}
+          className="rounded-2xl border border-border bg-surface p-5 sm:p-6 space-y-5"
+        >
+          {errorMsg && (
+            <div
+              role="alert"
+              className="p-3 rounded-xl bg-red-500/10 border border-red-500/25 text-xs text-red-300"
+            >
+              {errorMsg}
             </div>
+          )}
 
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-100">
-              {config.mode_headline}
-            </h1>
-
-            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed max-w-sm mx-auto">
-              {config.mode_subtext}
-            </p>
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-3 text-center">
+              {theme.ratingLabel} <span className="text-amber-400">*</span>
+            </label>
+            <StarRatingInput value={rating} onChange={setRating} />
           </div>
 
-          {/* Form Container */}
-          <form onSubmit={handleSubmit} className="bg-[#0d0f1a]/95 border border-white/10 rounded-3xl p-5 sm:p-8 backdrop-blur-xl shadow-2xl space-y-5 sm:space-y-6">
-
-            {/* Error Banner */}
-            {errorMsg && (
-              <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/25 text-xs text-red-300 font-semibold flex items-center justify-between">
-                <span>{errorMsg}</span>
-                <button type="button" onClick={() => setErrorMsg(null)} className="text-red-400 hover:text-white">✕</button>
-              </div>
-            )}
-
-            {/* Star Rating Input */}
+          {config.show_tag_selector && (
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3 text-center">
-                {theme.ratingLabel}
-                {config.requires_rating && <span className="text-amber-400 ml-1">*</span>}
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+                Category (optional)
               </label>
-              <StarRatingInput value={rating} onChange={setRating} />
-            </div>
-
-            {/* PRODUCT MODE: Optional Tag Selector */}
-            {config.show_tag_selector && (
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
-                  Category (optional)
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {PRODUCT_TAGS.map(tag => (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => setSelectedTag(selectedTag === tag ? "" : tag)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
-                        selectedTag === tag
-                          ? "bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-500/20"
-                          : "border-white/10 text-slate-400 hover:border-white/20 hover:text-slate-200"
-                      }`}
-                    >
-                      {tag}
-                    </button>
-                  ))}
-                </div>
+              <div className="flex flex-wrap gap-2">
+                {PRODUCT_TAGS.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => setSelectedTag(selectedTag === tag ? "" : tag)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                      selectedTag === tag
+                        ? "bg-primary/20 border-primary/40 text-white"
+                        : "border-border text-slate-400"
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                ))}
               </div>
-            )}
-
-            {/* Main Feedback Textarea */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  Tell us what we can improve <span className="text-amber-400">*</span>
-                </label>
-                <span className={`text-[10px] font-mono font-semibold ${charCount >= minChars ? "text-emerald-400" : "text-slate-500"}`}>
-                  {charCount}/{minChars} min
-                </span>
-              </div>
-              <textarea
-                value={text}
-                onChange={e => { setText(e.target.value); setCharCount(e.target.value.trim().length); }}
-                placeholder={theme.textPlaceholder}
-                rows={4}
-                required
-                minLength={minChars}
-                maxLength={2000}
-                className="w-full bg-[#161827] border border-white/10 rounded-2xl px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-all resize-none leading-relaxed"
-              />
             </div>
+          )}
 
-            {/* Optional Customer Name Input */}
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
-                {theme.namePrompt}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Your feedback <span className="text-amber-400">*</span>
               </label>
-              <input
-                type="text"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="e.g. Rahul"
-                maxLength={80}
-                className="w-full bg-[#161827] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 transition-all"
-              />
+              <span
+                className={`text-[10px] font-mono ${
+                  charCount >= minChars ? "text-emerald-400" : "text-slate-600"
+                }`}
+              >
+                {charCount}/{minChars}
+              </span>
             </div>
+            <textarea
+              value={text}
+              onChange={(e) => {
+                setText(e.target.value);
+                setCharCount(e.target.value.trim().length);
+              }}
+              placeholder={theme.textPlaceholder}
+              rows={4}
+              required
+              minLength={minChars}
+              maxLength={2000}
+              className="w-full bg-surface-2 border border-border rounded-xl px-3.5 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/20 resize-none"
+            />
+          </div>
 
-            {/* Optional Customer Email Input */}
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                Email (optional)
-              </label>
-              <p className="text-[10px] text-slate-500 mb-2">
-                Optional — only used to follow up on this feedback.
-              </p>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="name@example.com"
-                maxLength={200}
-                className="w-full bg-[#161827] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 transition-all"
-              />
-            </div>
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+              {theme.namePrompt}
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Name"
+              maxLength={80}
+              className="w-full bg-surface-2 border border-border rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-primary/40"
+            />
+          </div>
 
-            {/* REWARD MODE Banner (Secondary to feedback request) */}
-            {config.show_reward_promise && config.reward_enabled && !inCooldown && (
-              <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20">
-                <span className="text-2xl shrink-0">🎁</span>
-                <div className="text-[11px] text-amber-300 leading-relaxed">
-                  <p className="font-bold">Earn {config.points_per_feedback} loyalty points</p>
-                  <p className="text-amber-400/80">
-                    {config.reward_description || "Redeem points for discounts or special rewards on your next visit."}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* REWARD MODE Cooldown Notice */}
-            {inCooldown && (
-              <div className="p-3 rounded-2xl bg-white/5 border border-white/10 text-center">
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  💡 <strong>Reward cooldown active.</strong> You can still share your feedback anytime to help us improve!
-                </p>
-              </div>
-            )}
-
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={!isValid || submitting}
-              className={`w-full py-3.5 sm:py-4 rounded-2xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${theme.ctaClass} disabled:opacity-40 disabled:cursor-not-allowed`}
-            >
-              {submitting ? (
-                <><div className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin" /> Submitting Feedback…</>
-              ) : (
-                <>{theme.icon} {theme.ctaLabel}</>
-              )}
-            </button>
-
-            <p className="text-center text-[10px] text-slate-500 leading-relaxed">
-              Your feedback goes directly to {config.business_name}. No spam. Confidential & secure.
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+              Email (optional)
+            </label>
+            <p className="text-[10px] text-slate-500 mb-2">
+              Optional — only used to follow up on this feedback.
             </p>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@example.com"
+              maxLength={200}
+              className="w-full bg-surface-2 border border-border rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-primary/40"
+            />
+          </div>
 
-          </form>
+          {config.show_reward_promise && config.reward_enabled && !inCooldown && (
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200">
+              Earn {config.points_per_feedback} loyalty points
+              {config.reward_description ? ` — ${config.reward_description}` : ""}
+            </div>
+          )}
 
-          {/* Simple Clean Footer */}
-          <p className="text-center text-[10px] text-slate-600 mt-6">
-            Powered by <span className="text-slate-400 font-semibold">{config.business_name}</span>
-          </p>
-        </div>
+          {inCooldown && (
+            <p className="text-[11px] text-slate-500 text-center">
+              Reward cooldown active. You can still submit feedback.
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={!isValid || submitting}
+            className="w-full py-3.5 rounded-xl text-sm font-bold bg-primary text-white hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {submitting ? "Submitting…" : theme.ctaLabel}
+          </button>
+        </form>
+
+        <p className="text-center text-[10px] text-slate-600 mt-6">
+          Powered by RoadmapAI for {config.business_name}
+        </p>
       </div>
     </div>
+  );
+}
+
+export default function FeedbackFormPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <FeedbackFormContent />
+    </Suspense>
   );
 }

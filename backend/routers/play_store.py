@@ -8,6 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 from database import get_db
 from pipeline.orchestrator import run_pipeline
+from services.business_linkage import resolve_business_id, create_analysis_version
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
@@ -18,7 +19,7 @@ class PlayStoreRequest(BaseModel):
     lang: str = Field(default="en")
     country: str = Field(default="us")
     team_size: str = Field(default="2_5")
-    business_id: str | None = Field(default=None, description="Phase 2: link to business workspace")
+    business_id: str | None = Field(default=None, description="Link analysis to a business workspace")
 
 
 @router.post("/play-store")
@@ -29,6 +30,7 @@ async def upload_play_store(
     """
     Scrape reviews from the Google Play Store for the given app_id,
     insert them into the database, and run the analysis pipeline.
+    Every analysis is linked to a business_id (auto-created when omitted).
     """
     try:
         from google_play_scraper import reviews as play_reviews, Sort  # type: ignore
@@ -59,6 +61,12 @@ async def upload_play_store(
 
     db = get_db()
     session_id = str(uuid.uuid4())
+    resolved_business_id = resolve_business_id(
+        db,
+        body.business_id,
+        label=f"Play Store {body.app_id}",
+        source="play_store",
+    )
 
     session_row = {
         "id":            session_id,
@@ -67,34 +75,11 @@ async def upload_play_store(
         "team_size":     body.team_size,
         "status":        "pending",
         "total_reviews": len(valid),
+        "business_id":   resolved_business_id,
     }
-    if body.business_id:
-        session_row["business_id"] = body.business_id
 
     db.table("sessions").insert(session_row).execute()
-
-    # ── Link session to business with version tracking ────────────────────────
-    if body.business_id:
-        try:
-            existing = (
-                db.table("analysis_versions")
-                .select("version")
-                .eq("business_id", body.business_id)
-                .order("version", desc=True)
-                .limit(1)
-                .execute()
-                .data
-            )
-            next_version = (existing[0]["version"] + 1) if existing else 1
-            db.table("analysis_versions").insert({
-                "business_id": body.business_id,
-                "session_id":  session_id,
-                "version":     next_version,
-                "label":       f"Version {next_version}",
-                "status":      "pending",
-            }).execute()
-        except Exception:
-            pass
+    create_analysis_version(db, resolved_business_id, session_id)
 
     # Build rows
     rows = []
@@ -126,10 +111,10 @@ async def upload_play_store(
 
     return {
         "session_id":    session_id,
-        "business_id":   body.business_id,
+        "business_id":   resolved_business_id,
         "app_id":        body.app_id,
         "total_reviews": len(valid),
         "status_url":    f"/pipeline/{session_id}/status",
         "dashboard_url": f"/results/{session_id}/dashboard",
-        "workspace_url": f"/business/{body.business_id}/analysis" if body.business_id else None,
+        "workspace_url": f"/business/{resolved_business_id}/analysis",
     }

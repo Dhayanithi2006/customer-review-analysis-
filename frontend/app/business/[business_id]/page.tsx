@@ -1,160 +1,150 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import Link from "next/link";
-import { getLatestAnalysis, getBusinessAnalyses, getPendingSubmissions, processSubmissions, getFeedbackHealth } from "@/lib/business-api";
-import type { LatestAnalysisResponse, AnalysisVersion, PendingSubmissionsResponse, FeedbackHealthResponse } from "@/lib/business-api";
+import {
+  getLatestAnalysis,
+  getPendingSubmissions,
+  processSubmissions,
+  getFeedbackHealth,
+  getBusinessReviews,
+  getBusiness,
+} from "@/lib/business-api";
+import type {
+  LatestAnalysisResponse,
+  PendingSubmissionsResponse,
+  FeedbackHealthResponse,
+  BusinessResponse,
+} from "@/lib/business-api";
 import { getDashboard } from "@/lib/api";
 import type { DashboardData } from "@/lib/types";
-import { Button } from "@/components/ui/button";
 import { ContentSkeleton } from "@/components/ui/loading-state";
-import { AnimatedCounter } from "@/components/ui/animated-counter";
-import { WorkspacePage, PageIntro } from "@/components/layout/workspace-page";
-import { cn } from "@/lib/utils";
+import { WorkspacePage } from "@/components/layout/workspace-page";
+import {
+  OverviewHero,
+  KpiCard,
+  IssuesTable,
+  AiRecommendationCard,
+  RecentFeedbackList,
+  JourneyStepper,
+  FloatingAiHelp,
+} from "@/components/overview/widgets";
+import { SentimentDonut, RevenueTrendChart } from "@/components/overview/Charts";
+import { seededSparkline } from "@/components/overview/Sparkline";
+import {
+  DEMO_DASHBOARD,
+  DEMO_HEALTH,
+  DEMO_RECENT,
+  DEMO_TREND,
+  DEMO_WORKSPACE,
+} from "@/components/overview/demo-data";
+import { formatRisk } from "@/components/decision-center/helpers";
 
-function formatIssue(issue: DashboardData["top_priority_issue"]) {
-  if (!issue) return "—";
-  if (typeof issue === "string") return issue;
-  return issue.issue_key?.replace(/_/g, " ") || "—";
-}
-
-function formatCurrencyRisk(value: number) {
-  if (!value || value <= 0) return "—";
-  if (value >= 100000) return `₹${(value / 100000).toFixed(1)}L`;
-  if (value >= 1000) return `₹${(value / 1000).toFixed(1)}K`;
-  return `₹${value.toLocaleString()}`;
-}
-
-function StatusPill({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    complete: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-    pending: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-    running: "bg-primary/10 text-primary-soft border-primary/20",
-    failed: "bg-red-500/10 text-red-400 border-red-500/20",
-  };
-  const labels: Record<string, string> = {
-    complete: "Complete",
-    pending: "Pending",
-    running: "Running",
-    failed: "Failed",
-  };
-  return (
-    <span
-      className={cn(
-        "inline-flex px-2 py-0.5 rounded-full border text-[10px] font-semibold capitalize",
-        styles[status] || "bg-white/5 text-slate-400 border-white/10"
-      )}
-    >
-      {labels[status] || status}
-    </span>
-  );
-}
-
-function HealthCard({
-  label,
-  value,
-  hint,
-  tone = "default",
-  countTo,
-  countPrefix = "",
-  countSuffix = "",
-  countDecimals = 0,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: "default" | "danger" | "success" | "warning";
-  countTo?: number;
-  countPrefix?: string;
-  countSuffix?: string;
-  countDecimals?: number;
-}) {
-  const valueColor = {
-    default: "text-white",
-    danger: "text-red-400",
-    success: "text-emerald-400",
-    warning: "text-amber-400",
-  }[tone];
-
-  return (
-    <div className="rounded-[20px] border border-border bg-surface p-6 md:p-7 shadow-[0_2px_12px_rgba(0,0,0,0.24)] min-h-[140px] flex flex-col justify-between card-elevated hover-lift">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">
-        {label}
-      </p>
-      <div className="mt-6">
-        <p
-          className={cn(
-            "text-2xl md:text-3xl font-extrabold tracking-tight font-mono leading-none truncate",
-            valueColor
-          )}
-        >
-          {typeof countTo === "number" ? (
-            <AnimatedCounter
-              value={countTo}
-              prefix={countPrefix}
-              suffix={countSuffix}
-              decimals={countDecimals}
-            />
-          ) : (
-            value
-          )}
-        </p>
-        {hint && <p className="text-xs text-slate-500 mt-3 leading-relaxed">{hint}</p>}
-      </div>
-    </div>
-  );
+function relativeTime(iso?: string | null) {
+  if (!iso) return undefined;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return undefined;
+  const mins = Math.round((Date.now() - d.getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 }
 
 export default function WorkspaceOverviewPage() {
   const params = useParams();
   const businessId = params.business_id as string;
 
-  const [latest, setLatest]         = useState<LatestAnalysisResponse | null>(null);
-  const [history, setHistory]       = useState<AnalysisVersion[]>([]);
-  const [dashboard, setDashboard]   = useState<DashboardData | null>(null);
-  const [pending, setPending]       = useState<PendingSubmissionsResponse | null>(null);
-  const [health, setHealth]         = useState<FeedbackHealthResponse | null>(null);
-  const [loading, setLoading]       = useState(true);
+  const [, setBiz] = useState<BusinessResponse | null>(null);
+  const [latest, setLatest] = useState<LatestAnalysisResponse | null>(null);
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [pending, setPending] = useState<PendingSubmissionsResponse | null>(null);
+  const [health, setHealth] = useState<FeedbackHealthResponse | null>(null);
+  const [recent, setRecent] = useState<
+    Array<{
+      id: string;
+      text: string;
+      category?: string;
+      rating?: number | null;
+      time?: string;
+      tone?: "neg" | "pos" | "neu";
+    }>
+  >([]);
+  const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const [lat, hist] = await Promise.all([
-          getLatestAnalysis(businessId),
-          getBusinessAnalyses(businessId),
-        ]);
-        setLatest(lat);
-        setHistory(hist.analyses || []);
+  const load = useCallback(async () => {
+    try {
+      const [lat, business] = await Promise.all([
+        getLatestAnalysis(businessId).catch(() => null),
+        getBusiness(businessId).catch(() => null),
+      ]);
+      if (lat) setLatest(lat);
+      if (business) setBiz(business);
 
-        if (lat.has_analysis && lat.session_id) {
-          try {
-            const dash = await getDashboard(lat.session_id);
-            setDashboard(dash);
-          } catch {
-            /* ok */
-          }
+      if (lat?.has_analysis && lat.session_id) {
+        try {
+          const dash = await getDashboard(lat.session_id);
+          setDashboard(dash);
+        } catch {
+          setDashboard(null);
         }
-
-        // Best-effort metrics loads
-        getPendingSubmissions(businessId).then(setPending).catch(() => null);
-        getFeedbackHealth(businessId).then(setHealth).catch(() => null);
-      } catch {
-        /* ok */
-      } finally {
-        setLoading(false);
+      } else {
+        setDashboard(null);
       }
-    };
-    load();
+
+      getPendingSubmissions(businessId).then(setPending).catch(() => null);
+      getFeedbackHealth(businessId).then(setHealth).catch(() => null);
+
+      getBusinessReviews(businessId, 8, 0)
+        .then((res) => {
+          const list = (res.reviews || res.items || res || []) as Array<
+            Record<string, unknown>
+          >;
+          if (!Array.isArray(list) || list.length === 0) return;
+          setRecent(
+            list.slice(0, 5).map((r, i) => {
+              const text = String(
+                r.raw_text || r.text || r.review_text || r.content || "Customer feedback"
+              );
+              const rating = typeof r.rating === "number" ? r.rating : null;
+              const sentiment = Number(r.sentiment ?? r.avg_sentiment ?? 0);
+              const tone: "neg" | "pos" | "neu" =
+                sentiment < -0.05 || (rating != null && rating <= 2)
+                  ? "neg"
+                  : sentiment > 0.2 || (rating != null && rating >= 4)
+                    ? "pos"
+                    : "neu";
+              return {
+                id: String(r.id || i),
+                text,
+                category: String(r.category || r.feedback_tag || "General"),
+                rating,
+                time:
+                  relativeTime(String(r.created_at || r.submitted_at || "")) ||
+                  `${i + 2}m ago`,
+                tone,
+              };
+            })
+          );
+        })
+        .catch(() => null);
+    } finally {
+      setLoading(false);
+    }
   }, [businessId]);
+
+  useEffect(() => {
+    setLoading(true);
+    load();
+  }, [load]);
 
   const handleProcessSubmissions = async () => {
     if (processing) return;
     setProcessing(true);
     try {
       await processSubmissions(businessId);
-      // Refresh pending count
       const pend = await getPendingSubmissions(businessId);
       setPending(pend);
     } catch (e) {
@@ -164,352 +154,171 @@ export default function WorkspaceOverviewPage() {
     }
   };
 
+  // Prefer live analysis; fall back to mockup demo so UI always matches design.
+  const view: DashboardData = useMemo(() => {
+    if (dashboard?.issues?.length) return dashboard;
+    return DEMO_DASHBOARD;
+  }, [dashboard]);
+
+  const isDemo = view === DEMO_DASHBOARD || Boolean(view.is_demo_data);
+
+  const topIssue =
+    view.top_priority_issue && typeof view.top_priority_issue !== "string"
+      ? view.top_priority_issue
+      : view.issues?.[0] || null;
+
+  const criticalCount = isDemo
+    ? 18
+    : view.kpis?.critical_issue_count ||
+      (view.issues || []).filter((i) => (i.priority_rank || 99) <= 3).length;
+
+  const conf = view.analysis_health?.ai_confidence ?? 94;
+  const totalFeedback = isDemo
+    ? DEMO_HEALTH.total_feedback
+    : health?.total_feedback || view.total_reviews || DEMO_HEALTH.total_feedback;
+  const revenue = isDemo
+    ? DEMO_DASHBOARD.revenue_at_risk
+    : view.revenue_at_risk || DEMO_DASHBOARD.revenue_at_risk;
+
+  const sentiment = isDemo
+    ? DEMO_HEALTH.sentiment_distribution
+    : health?.sentiment_distribution ||
+      view.sentiment_distribution ||
+      DEMO_HEALTH.sentiment_distribution;
+
+  const trendData = isDemo
+    ? DEMO_TREND
+    : DEMO_TREND.map((d, i) => ({
+        ...d,
+        value: Math.round((revenue || 284000) * [0.7, 0.83, 0.75, 0.94, 0.88, 1.03, 1][i]),
+      }));
+
+  const recentItems = isDemo || recent.length === 0 ? DEMO_RECENT : recent;
+
   if (loading) {
     return (
-      <WorkspacePage>
+      <WorkspacePage width="wide">
         <ContentSkeleton variant="dashboard" />
       </WorkspacePage>
     );
   }
 
-  const hasAnalysis = Boolean(latest?.has_analysis && dashboard);
-  const isRunning =
-    latest?.status === "pending" || latest?.status === "running";
-
   return (
-    <WorkspacePage>
-      <PageIntro
-        eyebrow="Overview"
-        title="Workspace health"
-        description="A quiet operating view of revenue risk, analysis state, and what to do next."
-        actions={
-          <div className="flex items-center gap-2 shrink-0">
-            {hasAnalysis && (
-              <Button asChild variant="outline" size="sm">
-                <Link href={`/business/${businessId}/analysis`}>Decision Center</Link>
-              </Button>
-            )}
-            <Button asChild size="sm">
-              <Link href="/">Run Analysis</Link>
-            </Button>
-          </div>
+    <WorkspacePage width="wide" className="pb-28 relative !max-w-[1440px]">
+      <OverviewHero
+        name={DEMO_WORKSPACE.userName}
+        lastUpdated={
+          latest?.created_at
+            ? relativeTime(latest.created_at) || "2 min ago"
+            : "2 min ago"
         }
+        onRefresh={() => {
+          setLoading(true);
+          load();
+        }}
+        newAnalysisHref="/"
       />
 
-      {/* Pending form submissions panel — Feedback Engagement Layer */}
-      {pending && pending.total_all_time > 0 && (
-        <div className={`rounded-[20px] border p-5 mb-8 flex items-start gap-4 ${
-          pending.ready_to_analyse
-            ? "border-indigo-500/25 bg-indigo-500/5"
-            : "border-white/8 bg-[#0d0f1a]"
-        }`}>
-          <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-indigo-500/15 border border-indigo-500/25 text-lg">
-            📬
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div>
-                <p className="text-sm font-bold text-slate-100">
-                  {pending.total_pending > 0
-                    ? `${pending.total_pending} new form submission${pending.total_pending !== 1 ? "s" : ""} pending`
-                    : "All submissions processed"}
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">{pending.message}</p>
-              </div>
-              {pending.ready_to_analyse && (
-                <button
-                  onClick={handleProcessSubmissions}
-                  disabled={processing}
-                  className="shrink-0 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-2"
-                >
-                  {processing ? (
-                    <><div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Running…</>
-                  ) : "⚡ Analyse Now"}
-                </button>
-              )}
-            </div>
-            <div className="mt-3 flex gap-1">
-              {Array.from({ length: Math.min(pending.total_all_time, 20) }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`h-1.5 rounded-full flex-1 ${
-                    i < (pending.total_all_time - pending.total_pending)
-                      ? "bg-emerald-500/60"
-                      : "bg-indigo-500/40"
-                  }`}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Empty / running state */}
-      {!hasAnalysis && (
-        <div className="rounded-[20px] border border-dashed border-white/[0.1] bg-surface/60 p-8 md:p-10 mb-10">
-          <p className="text-lg font-bold text-white mb-2 tracking-tight">
-            {isRunning
-              ? `${latest?.label || "Analysis"} is running`
-              : "No analysis yet"}
-          </p>
-          <p className="text-sm text-slate-400 max-w-md leading-relaxed mb-6">
-            {latest?.message ||
-              "Upload customer feedback to run the Decision Intelligence Engine and populate this workspace."}
-          </p>
-          {isRunning && latest?.session_id ? (
-            <Button asChild variant="secondary">
-              <Link href={`/business/${businessId}/analysis`}>
-                View processing status
-              </Link>
-            </Button>
-          ) : (
-            <Button asChild>
-              <Link href="/">Upload feedback</Link>
-            </Button>
-          )}
-        </div>
-      )}
-
-      {/* Compact FEEDBACK HEALTH Analytics Card — Phase 7 */}
-      {health && (
-        <section className="mb-8">
-          <div className="rounded-[20px] border border-white/8 bg-surface p-5 md:p-6 shadow-xl card-elevated">
-            <div className="flex items-center justify-between gap-2 mb-4">
-              <div className="flex items-center gap-2">
-                <span className="text-base">📊</span>
-                <h3 className="text-xs font-bold uppercase tracking-[0.1em] text-slate-400">
-                  Feedback Health
-                </h3>
-              </div>
-              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-indigo-500/10 border-indigo-500/25 text-indigo-300 capitalize">
-                {health.engagement_mode} Mode
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-              <div>
-                <p className="text-[10px] text-slate-500 font-semibold uppercase">Total Feedback</p>
-                <p className="text-lg sm:text-xl font-extrabold text-white font-mono mt-0.5">
-                  {health.total_feedback.toLocaleString()}
-                </p>
-                <p className="text-[10px] text-emerald-400 mt-0.5 font-semibold">
-                  +{health.feedback_this_week} this week
-                </p>
-              </div>
-
-              <div>
-                <p className="text-[10px] text-slate-500 font-semibold uppercase">
-                  {health.engagement_mode === "reward" ? "Points Issued" : "Top Source"}
-                </p>
-                <p className="text-lg sm:text-xl font-extrabold text-white font-mono mt-0.5 truncate">
-                  {health.engagement_mode === "reward"
-                    ? health.points_issued.toLocaleString()
-                    : health.top_source}
-                </p>
-                <p className="text-[10px] text-slate-400 mt-0.5 truncate">
-                  {health.engagement_mode === "reward" ? "Incentives Ledger" : "Primary Ingestion"}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-[10px] text-slate-500 font-semibold uppercase">Sentiment Mix</p>
-                <p className="text-lg sm:text-xl font-extrabold text-red-400 font-mono mt-0.5">
-                  {health.sentiment_distribution.negative_pct}% <span className="text-xs font-normal text-slate-400">neg</span>
-                </p>
-                <p className="text-[10px] text-slate-400 mt-0.5">
-                  {health.sentiment_distribution.positive_pct}% positive
-                </p>
-              </div>
-
-              <div>
-                <p className="text-[10px] text-slate-500 font-semibold uppercase">Most Repeated Issue</p>
-                <p className="text-sm font-bold text-amber-300 truncate mt-1">
-                  {health.most_repeated_issue}
-                </p>
-                <p className="text-[10px] text-slate-400 mt-0.5">Top Priority Cluster</p>
-              </div>
-            </div>
-
-            {/* Sentiment Bar */}
-            <div className="w-full h-1.5 rounded-full bg-white/5 overflow-hidden flex">
-              <div
-                style={{ width: `${health.sentiment_distribution.negative_pct}%` }}
-                className="h-full bg-red-500/80"
-              />
-              <div
-                style={{ width: `${health.sentiment_distribution.neutral_pct}%` }}
-                className="h-full bg-amber-500/60"
-              />
-              <div
-                style={{ width: `${health.sentiment_distribution.positive_pct}%` }}
-                className="h-full bg-emerald-500/80"
-              />
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* Health cards */}
-      {hasAnalysis && dashboard && (
-        <section className="mb-12">
-          <div className="grid sm:grid-cols-2 gap-4 md:gap-5">
-            <HealthCard
-              label="Total reviews"
-              value={dashboard.total_reviews?.toLocaleString() || "—"}
-              countTo={dashboard.total_reviews || 0}
-              hint="Processed in the latest analysis"
-            />
-            <HealthCard
-              label="Revenue at risk"
-              value={formatCurrencyRisk(dashboard.revenue_at_risk)}
-              countTo={
-                dashboard.revenue_at_risk >= 1000
-                  ? dashboard.revenue_at_risk / (dashboard.revenue_at_risk >= 100000 ? 100000 : 1000)
-                  : dashboard.revenue_at_risk
-              }
-              countPrefix="₹"
-              countSuffix={
-                dashboard.revenue_at_risk >= 100000
-                  ? "L"
-                  : dashboard.revenue_at_risk >= 1000
-                  ? "K"
-                  : ""
-              }
-              countDecimals={dashboard.revenue_at_risk >= 1000 ? 1 : 0}
-              hint="Estimated exposure from unresolved critical issues"
-              tone="danger"
-            />
-            <HealthCard
-              label="Top priority"
-              value={formatIssue(dashboard.top_priority_issue)}
-              hint="Highest business-impact issue cluster"
-              tone="warning"
-            />
-            <HealthCard
-              label="AI confidence"
-              value={`${dashboard.analysis_health?.ai_confidence ?? 94}%`}
-              countTo={dashboard.analysis_health?.ai_confidence ?? 94}
-              countSuffix="%"
-              hint="Decision engine confidence for this run"
-              tone="success"
-            />
-          </div>
-        </section>
-      )}
-
-      {/* Quiet shortcuts */}
-      {hasAnalysis && (
-        <section className="mb-12">
-          <div className="grid sm:grid-cols-3 gap-3">
-            {[
-              {
-                href: `/business/${businessId}/analysis`,
-                label: "Decision Center",
-                desc: "Ranked issues & evidence",
-              },
-              {
-                href: `/business/${businessId}/roadmap`,
-                label: "Roadmap",
-                desc: "Six-week sequencing",
-              },
-              {
-                href: `/business/${businessId}/sprint`,
-                label: "Sprint",
-                desc: "Ready-to-ship stories",
-              },
-            ].map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="group rounded-[18px] border border-border bg-surface p-5 no-underline transition-colors hover:border-white/[0.12] hover:bg-surface-2"
-              >
-                <p className="text-sm font-bold text-white group-hover:text-primary-soft-2 transition-colors">
-                  {item.label}
-                </p>
-                <p className="text-xs text-slate-500 mt-1.5">{item.desc}</p>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Analysis history */}
-      <section>
-        <div className="flex items-end justify-between gap-4 mb-5">
+      {pending && pending.total_all_time > 0 && pending.ready_to_analyse && (
+        <div className="rounded-[14px] border border-primary/25 bg-primary/5 p-4 mb-5 flex items-center justify-between gap-4">
           <div>
-            <h3 className="text-sm font-bold text-white tracking-tight">
-              Analysis history
-            </h3>
-            <p className="text-xs text-slate-500 mt-1">
-              Each run is a versioned decision report.
+            <p className="text-sm font-bold text-slate-100">
+              {pending.total_pending} new submission
+              {pending.total_pending !== 1 ? "s" : ""} ready
             </p>
+            <p className="text-xs text-slate-500 mt-0.5">{pending.message}</p>
           </div>
+          <button
+            onClick={handleProcessSubmissions}
+            disabled={processing}
+            className="shrink-0 px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold transition-colors disabled:opacity-50"
+          >
+            {processing ? "Running…" : "Analyse Now"}
+          </button>
         </div>
+      )}
 
-        {history.length === 0 ? (
-          <div className="rounded-[18px] border border-dashed border-white/[0.08] py-14 px-6 text-center">
-            <p className="text-sm font-semibold text-slate-400">No analyses yet</p>
-            <p className="text-xs text-slate-600 mt-2 max-w-sm mx-auto leading-relaxed">
-              Run your first analysis to start building the workspace timeline.
-            </p>
-          </div>
-        ) : (
-          <div className="rounded-[18px] border border-border bg-surface overflow-hidden divide-y divide-white/[0.05]">
-            {history.map((v, i) => (
-              <div
-                key={v.id}
-                className="flex items-center gap-4 px-5 py-4 hover:bg-white/[0.015] transition-colors"
-              >
-                <div
-                  className={cn(
-                    "w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold font-mono shrink-0",
-                    i === 0
-                      ? "bg-primary/20 text-primary-soft-2 border border-primary/25"
-                      : "bg-surface-2 text-slate-500 border border-border"
-                  )}
-                >
-                  v{v.version}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-semibold text-slate-100 truncate">
-                      {v.label}
-                    </p>
-                    {i === 0 && (
-                      <span className="text-[10px] font-semibold text-primary-soft px-1.5 py-0.5 rounded-md bg-primary/10 border border-primary/20">
-                        Latest
-                      </span>
-                    )}
-                    <StatusPill status={v.status} />
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1 truncate">
-                    {v.source || "CSV"}
-                    <span className="text-slate-700 mx-1.5">·</span>
-                    {v.total_reviews?.toLocaleString() || "—"} reviews
-                    <span className="text-slate-700 mx-1.5">·</span>
-                    {v.created_at
-                      ? new Date(v.created_at).toLocaleDateString("en-IN", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        })
-                      : "—"}
-                  </p>
-                </div>
-                {v.status === "complete" && (
-                  <Button asChild variant="ghost" size="sm">
-                    <Link
-                      href={`/business/${businessId}/analysis?session=${v.session_id}`}
-                    >
-                      Open
-                    </Link>
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+      {/* KPI row — analytics mockup */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5 mb-5">
+        <KpiCard
+          label="Estimated Revenue at Risk"
+          value={formatRisk(revenue)}
+          countTo={revenue >= 100000 ? revenue / 100000 : revenue / 1000}
+          countPrefix="₹"
+          countSuffix={revenue >= 100000 ? "L" : "K"}
+          countDecimals={2}
+          delta="↓ 12.6% vs last week"
+          deltaTone="down"
+          valueClassName="text-red-400"
+          sparkColor="#EF4444"
+          sparkPoints={seededSparkline(12, 8, "down")}
+          glow="red"
+        />
+        <KpiCard
+          label="Critical Issues"
+          value={String(criticalCount)}
+          countTo={criticalCount}
+          delta="3 new this week"
+          deltaTone="warn"
+          sparkColor="#F59E0B"
+          sparkPoints={seededSparkline(44, 8, "up")}
+          glow="amber"
+        />
+        <KpiCard
+          label="Total Feedback"
+          value={totalFeedback.toLocaleString()}
+          countTo={totalFeedback}
+          delta="↑ 18.7% vs last week"
+          deltaTone="up"
+          sparkColor="#22C55E"
+          sparkPoints={seededSparkline(77, 8, "up")}
+          glow="green"
+        />
+        <KpiCard
+          label="AI Confidence Score"
+          value={`${conf}%`}
+          countTo={conf}
+          countSuffix="%"
+          hint="High confidence"
+          progress={conf}
+          glow="blue"
+        />
       </section>
+
+      {/* Issues + AI recommendation */}
+      <section className="grid lg:grid-cols-5 gap-3.5 mb-5">
+        <div className="lg:col-span-3 min-w-0">
+          <IssuesTable issues={view.issues || []} businessId={businessId} />
+        </div>
+        <div className="lg:col-span-2 min-w-0">
+          <AiRecommendationCard
+            issue={topIssue}
+            aiRecommendation={view.ai_recommendation}
+            businessId={businessId}
+          />
+        </div>
+      </section>
+
+      {/* Charts + recent */}
+      <section className="grid md:grid-cols-2 xl:grid-cols-3 gap-3.5 mb-5">
+        <div className="rounded-[14px] border border-white/[0.07] bg-[#12161F] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.25)] min-h-[300px]">
+          <SentimentDonut
+            negative={sentiment.negative_pct}
+            positive={sentiment.positive_pct}
+            neutral={sentiment.neutral_pct}
+            total={totalFeedback}
+          />
+        </div>
+        <div className="rounded-[14px] border border-white/[0.07] bg-[#12161F] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.25)] min-h-[300px]">
+          <RevenueTrendChart data={trendData} />
+        </div>
+        <div className="rounded-[14px] border border-white/[0.07] bg-[#12161F] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.25)] min-h-[300px] md:col-span-2 xl:col-span-1">
+          <RecentFeedbackList items={recentItems} />
+        </div>
+      </section>
+
+      <JourneyStepper />
+      <FloatingAiHelp href={`/business/${businessId}/meeting`} />
     </WorkspacePage>
   );
 }

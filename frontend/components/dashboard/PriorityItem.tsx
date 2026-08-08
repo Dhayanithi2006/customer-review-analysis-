@@ -10,7 +10,10 @@ interface PriorityItemProps {
 }
 
 export function PriorityItem({ cluster, sessionId, rank }: PriorityItemProps) {
-  const score = Math.round(cluster.priority_score * 100);
+  const score = (() => {
+    const raw = cluster.priority_score || 0;
+    return Math.round(raw <= 1.5 ? raw * 100 : raw);
+  })();
 
   return (
     <Link

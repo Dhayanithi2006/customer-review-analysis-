@@ -1,13 +1,26 @@
 review_text,rating,review_date,user_id
 "Payment retries fail after 30 seconds timeout on checkout step. Lost my order twice!",1,2026-08-01,user_101
 "Checkout keeps crashing when I press the Pay Now button. Terrible experience for a paid app.",1,2026-08-02,user_102
-"Great UI and sleek dark mode design! Really loving the overall dashboard feel.",5,2026-08-03,user_103
 "Payment failed again on retry. Money deducted but subscription is not active.",1,2026-08-03,user_104
-"Login delay takes over 15 seconds on Android 14. Needs optimization desperately.",2,2026-08-04,user_105
-"Slow login response time when authenticating with Google OAuth.",2,2026-08-05,user_106
+"Payment timeout error on checkout page. Unable to purchase premium plan.",1,2026-08-06,user_109
+"UPI payment failed three times at billing. Had to abandon the cart.",1,2026-08-08,user_120
+"Card declined incorrectly — support confirmed money left wallet but order failed.",1,2026-08-09,user_121
+"Waited 25 minutes at checkout counter during evening rush. Only two counters open.",2,2026-08-02,user_130
+"Checkout queue is ridiculous on weekends. Lost customers walking out.",2,2026-08-04,user_131
+"Billing counter wait time is too long. Please open more lanes.",2,2026-08-05,user_132
+"Stood in line for 20 minutes then left without buying.",2,2026-08-07,user_133
 "Please add dark mode support! It is too bright at night.",4,2026-08-05,user_107
 "Would love a dark theme option in settings. Highly requested feature!",5,2026-08-06,user_108
-"Payment timeout error on checkout page. Unable to purchase premium plan.",1,2026-08-06,user_109
+"Dark mode would be nice for late-night browsing.",4,2026-08-08,user_140
+"App looks fine but a dark theme would be a cool bonus.",5,2026-08-09,user_141
+"Any plans for dark mode? Not urgent but would appreciate it.",4,2026-08-10,user_142
+"Dark mode request again — optional UX polish.",5,2026-08-11,user_143
+"Still waiting for dark mode. Low priority for me though.",4,2026-08-12,user_144
+"Login delay takes over 15 seconds on Android 14. Needs optimization desperately.",2,2026-08-04,user_105
+"Slow login response time when authenticating with Google OAuth.",2,2026-08-05,user_106
 "Customer support was very helpful resolving my account issue.",5,2026-08-07,user_110
-"test review test 123",1,2026-08-07,user_111
-"Payment retries fail after 30 seconds timeout on checkout step. Lost my order twice!",1,2026-08-01,user_101
+"Great UI overall. Minor wish for dark mode someday.",5,2026-08-03,user_103
+"Payment gateway error at final step — cannot complete purchase.",1,2026-08-13,user_122
+"Checkout waiting time during peak hours is unacceptable.",2,2026-08-14,user_134
+"Please add dark mode — lots of friends asking for it.",4,2026-08-15,user_145
+"Dark theme please! Cosmetic only but popular request.",5,2026-08-16,user_146

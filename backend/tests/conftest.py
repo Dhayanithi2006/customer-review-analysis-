@@ -1,6 +1,11 @@
 """
 Pytest configuration and shared test fixtures for RoadmapAI backend.
 """
+import os
+# Soften owner auth for legacy mocked tests (businesses without owner_token_hash).
+# Dedicated ownership isolation tests set OWNER_AUTH_ENFORCE=true themselves.
+os.environ.setdefault("OWNER_AUTH_ENFORCE", "false")
+
 import pytest
 import io
 import pandas as pd

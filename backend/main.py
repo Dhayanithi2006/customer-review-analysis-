@@ -38,6 +38,7 @@ app.include_router(feedback_settings.router)
 app.include_router(reward.router)
 app.include_router(resolutions.router)
 app.include_router(followup.router)
+# Telegram collection is intentionally unused — QR/form covers direct feedback.
 
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(ingest.router, prefix="/api/v1")

@@ -12,10 +12,15 @@ import uuid
 import base64
 import io
 from typing import Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Request, Header
 from pydantic import BaseModel, EmailStr, Field
 from database import get_db
 from core.logging import get_logger
+from core.ownership import (
+    assert_business_owner,
+    generate_owner_token,
+    hash_owner_token,
+)
 
 try:
     import qrcode
@@ -31,7 +36,8 @@ APP_BASE_URL = "http://localhost:3000"
 
 VALID_INDUSTRIES = [
     "Mobile App", "SaaS", "E-commerce", "Hospital",
-    "School", "Hostel", "Supermarket", "Restaurant", "Hotel", "Bank"
+    "School", "University", "Institute", "Hostel",
+    "Supermarket", "Restaurant", "Hotel", "Shop", "Bank",
 ]
 
 VALID_FEEDBACK_METHODS = [
@@ -39,13 +45,16 @@ VALID_FEEDBACK_METHODS = [
 ]
 
 # Industries that use QR-based physical feedback collection
-QR_BASED_INDUSTRIES = {"Hospital", "School", "Hostel", "Supermarket", "Restaurant", "Hotel", "Bank"}
+QR_BASED_INDUSTRIES = {
+    "Hospital", "School", "University", "Institute", "Hostel",
+    "Supermarket", "Restaurant", "Hotel", "Shop", "Bank",
+}
 # Industries that use digital/app-based ingestion
 DIGITAL_INDUSTRIES = {"Mobile App", "SaaS", "E-commerce"}
 
 # Feedback Engagement Layer — Mode Classification
-REWARD_INDUSTRIES      = {"Supermarket", "Hotel", "Restaurant", "E-commerce", "Hostel"}
-IMPROVEMENT_INDUSTRIES = {"Hospital", "School", "Bank"}
+REWARD_INDUSTRIES      = {"Supermarket", "Hotel", "Restaurant", "E-commerce", "Hostel", "Shop"}
+IMPROVEMENT_INDUSTRIES = {"Hospital", "School", "University", "Institute", "Bank"}
 PRODUCT_INDUSTRIES     = {"Mobile App", "SaaS"}
 
 
@@ -116,6 +125,8 @@ class BusinessResponse(BaseModel):
     premium_pct: float
     currency: str
     created_at: str
+    # Returned ONLY on register / token reset — store client-side, never log
+    owner_token: Optional[str] = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -150,7 +161,7 @@ def _generate_qr_base64(url: str) -> Optional[str]:
         return None
 
 
-def _build_response(row: dict, feedback_type: str) -> BusinessResponse:
+def _build_response(row: dict, feedback_type: str, owner_token: Optional[str] = None) -> BusinessResponse:
     industry = row.get("industry", "Supermarket")
     biz_id = row.get("id", str(uuid.uuid4()))
     return BusinessResponse(
@@ -169,6 +180,7 @@ def _build_response(row: dict, feedback_type: str) -> BusinessResponse:
         premium_pct=float(row.get("premium_pct") or 20.0),
         currency=row.get("currency") or "INR",
         created_at=str(row.get("created_at") or ""),
+        owner_token=owner_token,
     )
 
 
@@ -224,30 +236,62 @@ async def register_business(body: RegisterBusinessRequest):
     dashboard_url = f"{APP_BASE_URL}/business/{business_id}"
     feedback_type = "qr" if body.industry in QR_BASED_INDUSTRIES else "digital"
 
-    # ── Generate QR code (only for physical businesses, pointing to feedback URL)
-    qr_code = _generate_qr_base64(feedback_url) if feedback_type == "qr" else None
+    # Always generate QR for MVP collection — encodes business-specific URL with source=qr
+    qr_target = f"{feedback_url}?source=qr"
+    qr_code = _generate_qr_base64(qr_target)
+
+    # Owner auth token — plaintext returned once; only hash persisted
+    owner_token = generate_owner_token()
+    owner_token_hash = hash_owner_token(owner_token)
 
     # ── Persist to Supabase (through backend — never from frontend)
-    result = (
-        db.table("businesses")
-        .insert({
-            "id":                  business_id,
-            "business_name":       body.business_name,
-            "industry":            body.industry,
-            "email":               body.email,
-            "feedback_url":        feedback_url,
-            "dashboard_url":       dashboard_url,
-            "qr_code":             qr_code,
-            "feedback_method":     body.feedback_method,
-            "monthly_customers":   body.monthly_customers,
-            "avg_revenue_per_user": body.avg_revenue_per_user,
-            "premium_pct":         body.premium_pct,
-            "currency":            body.currency,
-        })
-        .execute()
-    )
+    try:
+        result = (
+            db.table("businesses")
+            .insert({
+                "id":                  business_id,
+                "business_name":       body.business_name,
+                "industry":            body.industry,
+                "email":               body.email,
+                "feedback_url":        feedback_url,
+                "dashboard_url":       dashboard_url,
+                "qr_code":             qr_code,
+                "feedback_method":     body.feedback_method,
+                "monthly_customers":   body.monthly_customers,
+                "avg_revenue_per_user": body.avg_revenue_per_user,
+                "premium_pct":         body.premium_pct,
+                "currency":            body.currency,
+                "engagement_mode":     _derive_engagement_mode(body.industry),
+                "owner_token_hash":    owner_token_hash,
+            })
+            .execute()
+        )
+    except Exception as e:
+        # #region agent log
+        try:
+            import json, time
+            from pathlib import Path
+            _p = Path(__file__).resolve().parents[2] / "debug-74d1c8.log"
+            with open(_p, "a", encoding="utf-8") as _f:
+                _f.write(json.dumps({"sessionId":"74d1c8","hypothesisId":"B","location":"business.py:register","message":"insert exception","data":{"error":str(e)[:300],"industry":body.industry},"timestamp":int(time.time()*1000)})+"\n")
+        except Exception:
+            pass
+        # #endregion
+        raise HTTPException(status_code=500, detail=f"Failed to create business: {str(e)[:200]}")
 
     if not result.data or not isinstance(result.data, list):
+        # #region agent log
+        try:
+            import json, time
+            from pathlib import Path
+            _p = Path(__file__).resolve().parents[1] / "debug-74d1c8.log"
+            # write at repo root
+            _p = Path(__file__).resolve().parents[2] / "debug-74d1c8.log"
+            with open(_p, "a", encoding="utf-8") as _f:
+                _f.write(json.dumps({"sessionId":"74d1c8","hypothesisId":"B","location":"business.py:register","message":"insert returned empty","data":{"business_id":business_id},"timestamp":int(time.time()*1000)})+"\n")
+        except Exception:
+            pass
+        # #endregion
         raise HTTPException(status_code=500, detail="Failed to create business record.")
 
     row = dict(result.data[0])
@@ -256,14 +300,29 @@ async def register_business(body: RegisterBusinessRequest):
         f"name={body.business_name} industry={body.industry} "
         f"feedback_method={body.feedback_method}"
     )
+    # #region agent log
+    try:
+        import json, time
+        from pathlib import Path
+        _p = Path(__file__).resolve().parents[2] / "debug-74d1c8.log"
+        with open(_p, "a", encoding="utf-8") as _f:
+            _f.write(json.dumps({"sessionId":"74d1c8","hypothesisId":"B","location":"business.py:register","message":"register ok","data":{"business_id":business_id,"industry":body.industry,"engagement_mode":_derive_engagement_mode(body.industry),"has_qr":bool(qr_code),"feedback_type":feedback_type},"timestamp":int(time.time()*1000)})+"\n")
+    except Exception:
+        pass
+    # #endregion
 
-    return _build_response(row, feedback_type)
+    return _build_response(row, feedback_type, owner_token=owner_token)
 
 
 @router.get("/{business_id}", response_model=BusinessResponse)
-async def get_business(business_id: str):
-    """Fetch full business workspace profile by ID."""
+async def get_business(
+    business_id: str,
+    request: Request,
+    x_owner_token: Optional[str] = Header(None),
+):
+    """Fetch full business workspace profile by ID (owner-only)."""
     db = get_db()
+    assert_business_owner(business_id, request=request, x_owner_token=x_owner_token, db=db)
     result = (
         db.table("businesses")
         .select("*")
@@ -280,14 +339,191 @@ async def get_business(business_id: str):
     return _build_response(row, feedback_type)
 
 
+@router.post("/{business_id}/qr/regenerate", response_model=BusinessResponse)
+async def regenerate_qr(
+    business_id: str,
+    request: Request,
+    x_owner_token: Optional[str] = Header(None),
+):
+    """Regenerate QR encoding /feedback/{business_id}?source=qr."""
+    db = get_db()
+    assert_business_owner(business_id, request=request, x_owner_token=x_owner_token, db=db)
+    result = (
+        db.table("businesses")
+        .select("*")
+        .eq("id", business_id)
+        .execute()
+        .data
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Business not found.")
+
+    row = dict(result[0])
+    feedback_url = row.get("feedback_url") or f"{APP_BASE_URL}/feedback/{business_id}"
+    qr_code = _generate_qr_base64(f"{feedback_url}?source=qr")
+    if not qr_code:
+        raise HTTPException(status_code=500, detail="QR generation failed. Ensure qrcode is installed.")
+
+    updated = (
+        db.table("businesses")
+        .update({"qr_code": qr_code, "feedback_url": feedback_url})
+        .eq("id", business_id)
+        .execute()
+    )
+    row = dict(updated.data[0]) if updated.data else {**row, "qr_code": qr_code}
+    industry_str = str(row.get("industry", ""))
+    feedback_type = "qr" if industry_str in QR_BASED_INDUSTRIES else "digital"
+    return _build_response(row, feedback_type)
+
+
+@router.post("/{business_id}/sample-data")
+async def load_sample_data(
+    business_id: str,
+    request: Request,
+    x_owner_token: Optional[str] = Header(None),
+):
+    """
+    Load bundled sample_reviews.csv into this business workspace (source=sample).
+    MVP alternative to Play Store scraping.
+    """
+    import asyncio
+    from pathlib import Path
+    import pandas as pd
+    from pipeline.orchestrator import run_pipeline
+    from services.business_linkage import create_analysis_version, validate_business_id
+
+    db = get_db()
+    assert_business_owner(business_id, request=request, x_owner_token=x_owner_token, db=db)
+    validate_business_id(db, business_id)
+
+    # FreshMart-style assumptions so sample ranking is algorithm-driven
+    # (Payment Failure > high-volume low-severity asks when metrics warrant it).
+    try:
+        biz_row = (
+            db.table("businesses")
+            .select("monthly_customers,avg_revenue_per_user,premium_pct,currency")
+            .eq("id", business_id)
+            .single()
+            .execute()
+            .data
+        ) or {}
+        patch = {}
+        if not biz_row.get("monthly_customers") or int(biz_row.get("monthly_customers") or 0) < 1000:
+            patch["monthly_customers"] = 5000
+        if not biz_row.get("avg_revenue_per_user") or float(biz_row.get("avg_revenue_per_user") or 0) < 1000:
+            patch["avg_revenue_per_user"] = 10000.0
+        if biz_row.get("premium_pct") is None:
+            patch["premium_pct"] = 25.0
+        if not biz_row.get("currency"):
+            patch["currency"] = "INR"
+        if patch:
+            db.table("businesses").update(patch).eq("id", business_id).execute()
+    except Exception:
+        pass
+
+    # Prefer repo-root sample file
+    candidates = [
+        Path(__file__).resolve().parents[2] / "sample_reviews.csv",
+        Path(__file__).resolve().parents[1] / "sample_reviews.csv",
+        Path.cwd() / "sample_reviews.csv",
+    ]
+    csv_path = next((p for p in candidates if p.exists()), None)
+    if not csv_path:
+        raise HTTPException(status_code=404, detail="sample_reviews.csv not found.")
+
+    try:
+        df = pd.read_csv(csv_path, encoding="utf-8", on_bad_lines="skip")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not read sample CSV: {e}")
+
+    text_col = "review_text" if "review_text" in df.columns else None
+    if not text_col:
+        for c in df.columns:
+            if "review" in c.lower() or "text" in c.lower() or "feedback" in c.lower():
+                text_col = c
+                break
+    if not text_col:
+        raise HTTPException(status_code=400, detail="Sample CSV missing review text column.")
+
+    rating_col = "rating" if "rating" in df.columns else None
+    date_col = "review_date" if "review_date" in df.columns else None
+
+    df = df.dropna(subset=[text_col])
+    df = df[df[text_col].astype(str).str.strip() != ""]
+    if len(df) < 10:
+        raise HTTPException(status_code=400, detail="Sample data has too few reviews.")
+
+    session_id = str(uuid.uuid4())
+    db.table("sessions").insert({
+        "id": session_id,
+        "filename": "sample_reviews.csv",
+        "source": "sample",
+        "team_size": "small_team",
+        "status": "pending",
+        "total_reviews": len(df),
+        "business_id": business_id,
+    }).execute()
+    create_analysis_version(db, business_id, session_id, label="Sample Data")
+
+    rows = []
+    for _, r in df.iterrows():
+        rating = None
+        if rating_col is not None:
+            try:
+                rating = int(float(r[rating_col]))
+                if not (1 <= rating <= 5):
+                    rating = None
+            except Exception:
+                rating = None
+        rev_date = None
+        if date_col is not None and pd.notna(r.get(date_col)):
+            try:
+                rev_date = pd.to_datetime(r[date_col]).date().isoformat()
+            except Exception:
+                rev_date = None
+        rows.append({
+            "id": str(uuid.uuid4()),
+            "session_id": session_id,
+            "raw_text": str(r[text_col]).strip(),
+            "source": "sample",
+            "rating": rating,
+            "review_date": rev_date,
+        })
+
+    for i in range(0, len(rows), 500):
+        db.table("reviews").insert(rows[i:i + 500]).execute()
+
+    try:
+        loop = asyncio.get_event_loop()
+        loop.run_in_executor(None, run_pipeline, session_id)
+    except Exception:
+        run_pipeline(session_id)
+
+    return {
+        "success": True,
+        "business_id": business_id,
+        "session_id": session_id,
+        "total_reviews": len(rows),
+        "source": "sample",
+        "status_url": f"/pipeline/{session_id}/status",
+        "workspace_url": f"/business/{business_id}/analysis",
+    }
+
+
 @router.patch("/{business_id}/settings", response_model=BusinessResponse)
-async def update_workspace_settings(business_id: str, body: WorkspaceSettingsUpdate):
+async def update_workspace_settings(
+    business_id: str,
+    body: WorkspaceSettingsUpdate,
+    request: Request,
+    x_owner_token: Optional[str] = Header(None),
+):
     """
     Update workspace revenue settings.
     These settings power the Revenue Impact calculation in the Decision Engine.
     Avg Revenue Per User replaces the hardcoded ₹500 default.
     """
     db = get_db()
+    assert_business_owner(business_id, request=request, x_owner_token=x_owner_token, db=db)
 
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if not updates:
@@ -314,12 +550,17 @@ async def update_workspace_settings(business_id: str, body: WorkspaceSettingsUpd
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.get("/{business_id}/analyses")
-async def list_analyses(business_id: str):
+async def list_analyses(
+    business_id: str,
+    request: Request,
+    x_owner_token: Optional[str] = Header(None),
+):
     """
     List all analysis versions for a business workspace.
     Returns versions in descending order (newest first).
     """
     db = get_db()
+    assert_business_owner(business_id, request=request, x_owner_token=x_owner_token, db=db)
 
     # Validate business exists
     biz = db.table("businesses").select("id,business_name").eq("id", business_id).execute().data
@@ -369,13 +610,18 @@ async def list_analyses(business_id: str):
 
 
 @router.get("/{business_id}/analyses/latest")
-async def get_latest_analysis(business_id: str):
+async def get_latest_analysis(
+    business_id: str,
+    request: Request,
+    x_owner_token: Optional[str] = Header(None),
+):
     """
     Get the most recent COMPLETED analysis session for a business.
     This is the single source of truth for the Decision Center.
     Returns the session_id to be used for fetching dashboard data.
     """
     db = get_db()
+    assert_business_owner(business_id, request=request, x_owner_token=x_owner_token, db=db)
 
     biz = db.table("businesses").select("id").eq("id", business_id).execute().data
     if not biz:
@@ -439,12 +685,19 @@ async def get_latest_analysis(business_id: str):
 
 
 @router.get("/{business_id}/reviews")
-async def get_business_reviews(business_id: str, limit: int = 50, offset: int = 0):
+async def get_business_reviews(
+    business_id: str,
+    request: Request,
+    x_owner_token: Optional[str] = Header(None),
+    limit: int = 50,
+    offset: int = 0,
+):
     """
     Review Repository — all reviews imported for this business workspace.
     Returns paginated list across all analysis versions.
     """
     db = get_db()
+    assert_business_owner(business_id, request=request, x_owner_token=x_owner_token, db=db)
 
     biz = db.table("businesses").select("id,business_name").eq("id", business_id).execute().data
     if not biz:
@@ -498,15 +751,16 @@ async def get_business_reviews(business_id: str, limit: int = 50, offset: int = 
 
 
 @router.get("/{business_id}/feedback-health")
-async def get_feedback_health(business_id: str):
-    """
-    Phase 7 — Feedback Health Analytics.
-    Returns compact, high-value engagement metrics derived from existing Review Repository
-    and feedback_submissions without duplicate DB logic.
-    """
+async def get_feedback_health(
+    business_id: str,
+    request: Request,
+    x_owner_token: Optional[str] = Header(None),
+):
+    """Owner-only feedback health aggregates for workspace overview."""
     from datetime import datetime, timezone, timedelta
 
     db = get_db()
+    assert_business_owner(business_id, request=request, x_owner_token=x_owner_token, db=db)
 
     biz = db.table("businesses").select("id,business_name,industry").eq("id", business_id).execute().data
     if not biz:
@@ -582,5 +836,48 @@ async def get_feedback_health(business_id: str):
             "positive_pct": pos_pct,
             "neutral_pct": 100 - (neg_pct + pos_pct),
         }
+    }
+
+
+@router.get("/{business_id}/rewards/summary")
+async def get_rewards_summary(
+    business_id: str,
+    request: Request,
+    x_owner_token: Optional[str] = Header(None),
+):
+    """
+    Owner-only aggregates for the Rewards workspace page.
+    Never returns customer PII — only counts and points totals.
+    """
+    db = get_db()
+    assert_business_owner(business_id, request=request, x_owner_token=x_owner_token, db=db)
+
+    biz = db.table("businesses").select("id,business_name,industry").eq("id", business_id).execute().data
+    if not biz:
+        raise HTTPException(status_code=404, detail="Business not found.")
+
+    rewards = (
+        db.table("feedback_rewards")
+        .select("points_awarded,reward_status,created_at")
+        .eq("business_id", business_id)
+        .execute()
+        .data
+    ) or []
+
+    awarded = [r for r in rewards if r.get("reward_status") == "awarded"]
+    skipped = [r for r in rewards if r.get("reward_status") == "cooldown_skipped"]
+    ineligible = [r for r in rewards if r.get("reward_status") == "ineligible"]
+    total_points = sum(int(r.get("points_awarded") or 0) for r in awarded)
+
+    return {
+        "business_id": business_id,
+        "business_name": biz[0].get("business_name"),
+        "industry": biz[0].get("industry"),
+        "total_reward_events": len(rewards),
+        "awarded_count": len(awarded),
+        "cooldown_skipped_count": len(skipped),
+        "ineligible_count": len(ineligible),
+        "total_points_issued": total_points,
+        "note": "Aggregates only — customer wallets and contact details are not exposed.",
     }
 

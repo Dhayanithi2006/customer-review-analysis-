@@ -50,13 +50,12 @@ def test_extract_json_handles_leading_conversational_text():
 def test_categorize_schema_validation():
     valid_data = [
         {
-            "review_index": 0,
-            "issue_key": "LOGIN_DELAY_SLOW",
-            "category": "Performance",
-            "severity": 7,
-            "confidence": 90,
+            "review_id": "r-0",
+            "issue_key": "login_delay_slow",
+            "category": "performance",
+            "severity": 4,
+            "confidence": 0.9,
             "summary": "Login takes 30 seconds",
-            "business_area": "Auth"
         },
         {
             # Invalid item: missing required summary field & invalid category
@@ -70,7 +69,10 @@ def test_categorize_schema_validation():
     validated = _validate_batch(valid_data)
     # Invalid item should be gracefully dropped without breaking the whole batch
     assert len(validated) == 1
-    assert validated[0].issue_key == "LOGIN_DELAY_SLOW"
+    assert validated[0].issue_key == "login_delay_slow"
+    assert validated[0].category == "performance"
+    assert validated[0].severity == 4
+    assert validated[0].confidence == 0.9
 
 
 # ── Test 3: Fallback Engine Execution ─────────────────────────────────────────
@@ -84,9 +86,11 @@ def test_fallback_categorization_engine():
     fallback_items = FallbackEngine.fallback_categorization(reviews_input)
 
     assert len(fallback_items) == 3
-    assert fallback_items[0].category == "Bug"
-    assert fallback_items[1].category == "Feature Request"
-    assert fallback_items[2].category == "Performance"
+    assert fallback_items[0].category in ("bug", "payment")
+    assert fallback_items[1].category == "feature_request"
+    assert fallback_items[2].category == "performance"
+    assert 1 <= fallback_items[0].severity <= 5
+    assert 0 <= fallback_items[0].confidence <= 1
 
 
 def test_fallback_executive_summary_engine():

@@ -1,454 +1,168 @@
 /**
- * Landing-page product previews — illustrative chrome matching the live product language.
+ * Landing visuals — teach "priority ≠ volume" then route into analytics.
  */
 
-function Sparkline({
-  color,
-  points,
-}: {
-  color: string;
-  points: string;
-}) {
+import Link from "next/link";
+import { TrendingUp, TrendingDown } from "lucide-react";
+
+export function PriorityContrastExample() {
   return (
-    <svg viewBox="0 0 64 24" className="w-full h-6" aria-hidden>
-      <polyline
-        fill="none"
-        stroke={color}
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        points={points}
-      />
-    </svg>
-  );
-}
-
-export function DecisionCenterMock() {
-  const nav = [
-    { label: "Overview", active: true },
-    { label: "Issues" },
-    { label: "Feedback" },
-    { label: "Roadmap" },
-    { label: "Sprints" },
-    { label: "AI Review" },
-    { label: "Exports" },
-    { label: "Settings" },
-  ];
-
-  const metrics = [
-    {
-      label: "Revenue at Risk",
-      value: "₹2.84L",
-      delta: "▼ 24% vs last month",
-      deltaTone: "text-red-400",
-      spark: "0,18 10,14 18,16 28,10 38,12 48,6 64,8",
-      sparkColor: "#F87171",
-    },
-    {
-      label: "Critical Issues",
-      value: "18",
-      delta: "3 new this week",
-      deltaTone: "text-amber-400",
-      spark: "0,8 12,10 22,7 34,12 46,9 64,14",
-      sparkColor: "#FBBF24",
-    },
-    {
-      label: "Total Reviews",
-      value: "2,041",
-      delta: "▲ 12% this week",
-      deltaTone: "text-emerald-400",
-      spark: "0,16 14,14 24,12 36,10 48,8 64,4",
-      sparkColor: "#34D399",
-    },
-    {
-      label: "Avg. Confidence",
-      value: "94%",
-      delta: "High signal quality",
-      deltaTone: "text-primary-soft",
-      spark: "0,12 16,11 28,10 40,9 52,8 64,7",
-      sparkColor: "#A99FFF",
-    },
-  ];
-
-  const issues = [
-    {
-      title: "Payment Failure",
-      sub: "Checkout · Bug cluster",
-      impact: "₹1.42L",
-      pct: "50%",
-      reviews: "623",
-      priority: "Critical",
-      priorityClass: "bg-red-500/15 text-red-400 border-red-500/25",
-      spark: "0,16 12,14 24,18 36,10 48,12 64,6",
-      sparkColor: "#F87171",
-    },
-    {
-      title: "Login Timeout",
-      sub: "Auth · Performance",
-      impact: "₹68K",
-      pct: "24%",
-      reviews: "318",
-      priority: "High",
-      priorityClass: "bg-amber-500/15 text-amber-400 border-amber-500/25",
-      spark: "0,10 14,12 26,9 40,14 52,11 64,13",
-      sparkColor: "#FBBF24",
-    },
-    {
-      title: "Sync Delay",
-      sub: "Library · Reliability",
-      impact: "₹41K",
-      pct: "14%",
-      reviews: "204",
-      priority: "Medium",
-      priorityClass: "bg-primary/15 text-primary-soft border-primary/25",
-      spark: "0,12 16,11 28,13 42,10 54,12 64,11",
-      sparkColor: "#A99FFF",
-    },
-  ];
-
-  return (
-    <div className="relative">
-      <div
-        className="absolute -inset-6 sm:-inset-10 rounded-[32px] opacity-70 blur-3xl pointer-events-none"
-        style={{
-          background:
-            "radial-gradient(ellipse at 55% 35%, rgba(109,93,246,0.28), transparent 62%)",
-        }}
-        aria-hidden
-      />
-
-      <div className="relative rounded-[20px] border border-white/[0.1] bg-[#0E1424] shadow-[0_28px_80px_rgba(0,0,0,0.55)] overflow-hidden">
-        {/* Browser chrome */}
-        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-background/90">
-          <div className="flex gap-1.5" aria-hidden>
-            <span className="w-2.5 h-2.5 rounded-full bg-white/20" />
-            <span className="w-2.5 h-2.5 rounded-full bg-white/20" />
-            <span className="w-2.5 h-2.5 rounded-full bg-white/20" />
-          </div>
-          <div className="flex-1 flex justify-center">
-            <div className="px-3 py-1 rounded-lg bg-white/[0.04] border border-border text-[10px] text-slate-500 font-mono truncate max-w-[260px]">
-              app.roadmapai · Decision Center
-            </div>
-          </div>
-        </div>
-
-        <div className="flex min-h-[420px] max-h-[520px]">
-          {/* Sidebar */}
-          <aside className="hidden md:flex w-[148px] shrink-0 flex-col border-r border-border bg-background py-4 px-2.5">
-            <div className="px-2 mb-4">
-              <p className="text-[10px] font-bold text-white tracking-tight">RoadmapAI</p>
-              <p className="text-[10px] text-slate-500 mt-0.5 truncate">Spotify (Play Store)</p>
-            </div>
-            <nav className="space-y-0.5" aria-hidden>
-              {nav.map((item) => (
-                <div
-                  key={item.label}
-                  className={`px-2.5 py-2 rounded-lg text-[11px] font-medium ${
-                    item.active
-                      ? "bg-primary text-white shadow-[0_4px_14px_rgba(109,93,246,0.28)]"
-                      : "text-slate-500"
-                  }`}
-                >
-                  {item.label}
-                </div>
-              ))}
-            </nav>
-          </aside>
-
-          {/* Main */}
-          <div className="flex-1 min-w-0 flex flex-col bg-surface">
-            <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-border">
-              <div>
-                <p className="text-sm font-bold text-white">Overview</p>
-                <p className="text-[10px] text-slate-500 flex items-center gap-1.5 mt-0.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  Last updated: 2 min ago
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="hidden sm:block px-2.5 py-1.5 rounded-lg border border-white/[0.08] bg-surface-2 text-[10px] text-slate-300">
-                  Spotify (Play Store)
-                </div>
-                <div className="px-2.5 py-1.5 rounded-lg bg-primary text-[10px] font-semibold text-white">
-                  + New Analysis
-                </div>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-hidden p-3 sm:p-4 space-y-3">
-              {/* Metrics */}
-              <div className="grid grid-cols-2 xl:grid-cols-4 gap-2">
-                {metrics.map((m) => (
-                  <div
-                    key={m.label}
-                    className="rounded-xl border border-border bg-surface-2 p-2.5 sm:p-3"
-                  >
-                    <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold truncate">
-                      {m.label}
-                    </p>
-                    <p className="text-base sm:text-lg font-extrabold font-mono text-white mt-1 tracking-tight">
-                      {m.value}
-                    </p>
-                    <div className="mt-1.5 opacity-90">
-                      <Sparkline color={m.sparkColor} points={m.spark} />
-                    </div>
-                    <p className={`text-[10px] mt-1 ${m.deltaTone}`}>{m.delta}</p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="grid lg:grid-cols-[1fr_160px] gap-2.5 min-h-0">
-                {/* Issues table */}
-                <div className="rounded-xl border border-border bg-[#0E1424]/80 overflow-hidden">
-                  <div className="px-3 py-2.5 border-b border-border flex items-center justify-between">
-                    <p className="text-[11px] font-bold text-slate-200">
-                      Top Issues by Revenue Impact
-                    </p>
-                    <p className="text-[10px] text-slate-500">Sorted by risk</p>
-                  </div>
-                  <div className="divide-y divide-white/[0.04]">
-                    <div className="hidden sm:grid grid-cols-[1.4fr_0.7fr_0.5fr_0.6fr_0.5fr] gap-2 px-3 py-1.5 text-[10px] uppercase tracking-wider text-slate-600 font-semibold">
-                      <span>Issue</span>
-                      <span>Impact</span>
-                      <span>Reviews</span>
-                      <span>Priority</span>
-                      <span>Trend</span>
-                    </div>
-                    {issues.map((issue) => (
-                      <div
-                        key={issue.title}
-                        className="grid grid-cols-1 sm:grid-cols-[1.4fr_0.7fr_0.5fr_0.6fr_0.5fr] gap-2 px-3 py-2.5 items-center"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-[11px] font-bold text-slate-100 truncate">
-                            {issue.title}
-                          </p>
-                          <p className="text-[10px] text-slate-500 truncate">{issue.sub}</p>
-                        </div>
-                        <div>
-                          <p className="text-[11px] font-bold font-mono text-red-400">
-                            {issue.impact}
-                          </p>
-                          <p className="text-[10px] text-slate-500">{issue.pct}</p>
-                        </div>
-                        <p className="text-[11px] font-mono text-slate-300">{issue.reviews}</p>
-                        <span
-                          className={`w-fit text-[10px] font-semibold px-2 py-0.5 rounded-md border ${issue.priorityClass}`}
-                        >
-                          {issue.priority}
-                        </span>
-                        <div className="hidden sm:block opacity-90">
-                          <Sparkline color={issue.sparkColor} points={issue.spark} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* AI recommendation */}
-                <div className="rounded-xl border border-primary/25 bg-gradient-to-b from-primary/15 to-[#161E2E] p-3 flex flex-col">
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <span className="w-5 h-5 rounded-md bg-primary flex items-center justify-center text-[10px] text-white font-bold">
-                      AI
-                    </span>
-                    <p className="text-[10px] font-bold text-primary-soft-2 uppercase tracking-wider">
-                      Recommendation
-                    </p>
-                  </div>
-                  <p className="text-[12px] font-bold text-white leading-snug mb-2">
-                    Focus on fixing Payment Failure first
-                  </p>
-                  <p className="text-[10px] text-slate-400 leading-relaxed mb-3">
-                    Why? Highest revenue at risk with strong evidence density across checkout reviews.
-                  </p>
-                  <div className="mt-auto py-2 text-center rounded-lg bg-primary text-[10px] font-semibold text-white">
-                    Start AI Review →
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+    <div
+      className="rounded-[18px] border border-white/[0.08] bg-[#12161F] overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.45)]"
+      aria-label="Example: volume is not the same as business priority"
+    >
+      <div className="px-5 py-4 border-b border-white/[0.06] bg-gradient-to-r from-[#6D5DF6]/15 to-transparent">
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
+          Priority is not volume
+        </p>
+        <p className="text-[14px] text-slate-200 mt-1.5 leading-snug font-medium">
+          RoadmapAI ranks by business impact — not complaint count alone.
+        </p>
       </div>
-    </div>
-  );
-}
 
-export function FeedbackFlowIllustration() {
-  const stages = [
-    { title: "Ingest", desc: "Reviews, tickets, CSVs" },
-    { title: "Normalize", desc: "One review schema" },
-    { title: "Cluster", desc: "Same problem, one issue" },
-    { title: "Score", desc: "Revenue at risk" },
-    { title: "Decide", desc: "Ranked next actions" },
-  ];
-
-  return (
-    <div className="w-full overflow-x-auto pb-2">
-      <div className="min-w-[720px] flex items-stretch gap-3">
-        {stages.map((stage, i) => (
-          <div key={stage.title} className="flex items-center gap-3 flex-1">
-            <div className="flex-1 rounded-[18px] border border-border bg-surface p-5 shadow-[0_2px_12px_rgba(0,0,0,0.28)]">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="w-7 h-7 rounded-xl bg-primary/15 border border-primary/25 text-primary-soft text-[10px] font-bold flex items-center justify-center">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <p className="text-sm font-bold text-white">{stage.title}</p>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">{stage.desc}</p>
-            </div>
-            {i < stages.length - 1 && (
-              <div className="shrink-0 w-6 flex justify-center" aria-hidden>
-                <div className="w-6 h-px bg-gradient-to-r from-primary/50 to-transparent" />
-              </div>
-            )}
+      <div className="grid sm:grid-cols-[1fr_auto_1fr] gap-0 items-stretch">
+        <article className="p-5 border-b sm:border-b-0 sm:border-r border-white/[0.06] bg-red-500/[0.04]">
+          <div className="flex items-center justify-between gap-2 mb-4">
+            <h3 className="text-[16px] font-bold text-white tracking-tight">
+              Payment Failure
+            </h3>
+            <span className="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-extrabold tracking-wide border bg-red-500/20 text-red-300 border-red-500/40">
+              CRITICAL
+            </span>
           </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export function EngineIllustration() {
-  return (
-    <div className="rounded-[20px] border border-border bg-surface overflow-hidden shadow-[0_2px_12px_rgba(0,0,0,0.28)]">
-      <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.08em] text-slate-500 font-bold">
-            Decision Intelligence Engine
+          <dl className="space-y-3 text-sm">
+            <div className="flex justify-between gap-3 items-baseline">
+              <dt className="text-slate-500">Complaints</dt>
+              <dd className="font-mono font-semibold text-slate-200">35</dd>
+            </div>
+            <div className="flex justify-between gap-3 items-baseline">
+              <dt className="text-slate-500">Est. revenue exposure</dt>
+              <dd className="font-mono font-bold text-red-400 text-base inline-flex items-center gap-1">
+                <TrendingUp className="size-3.5" strokeWidth={2.5} />
+                ₹3.8L
+              </dd>
+            </div>
+          </dl>
+          <p className="mt-5 text-[12px] text-slate-400 leading-relaxed border-t border-white/[0.06] pt-3">
+            Fewer mentions, high revenue exposure →{" "}
+            <span className="text-red-300 font-semibold">fix first</span>.
           </p>
-          <p className="text-sm font-bold text-white mt-0.5">Deterministic priority pipeline</p>
+        </article>
+
+        <div className="hidden sm:flex items-center justify-center px-2.5 bg-[#0E1219]">
+          <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600">
+            vs
+          </span>
         </div>
-        <span className="text-[10px] font-mono text-slate-500">live</span>
-      </div>
-      <div className="p-5 grid sm:grid-cols-2 gap-3">
-        {[
-          { k: "Categorize", v: "Bug · UX · Feature · Perf", s: "Gemini Flash" },
-          { k: "Cluster", v: "623 phrases → 1 issue", s: "Similarity graph" },
-          { k: "Impact", v: "Severity × volume × ARPU", s: "Revenue model" },
-          { k: "Rank", v: "Business impact score", s: "Priority formula" },
-        ].map((row) => (
-          <div
-            key={row.k}
-            className="rounded-2xl bg-surface-2 border border-white/[0.05] p-4"
-          >
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-2">
-              {row.k}
-            </p>
-            <p className="text-sm font-semibold text-slate-100 mb-1">{row.v}</p>
-            <p className="text-[11px] text-primary-soft">{row.s}</p>
-          </div>
-        ))}
-      </div>
-      <div className="px-5 pb-5">
-        <div className="rounded-2xl border border-primary/25 bg-primary/10 p-4 flex items-center justify-between gap-4">
-          <div>
-            <p className="text-[10px] text-primary-soft-2 uppercase tracking-wider font-bold mb-1">
-              Output
-            </p>
-            <p className="text-sm font-bold text-white">
-              Evidence-backed ranked decisions
-            </p>
-          </div>
-          <div className="text-right shrink-0">
-            <p className="text-lg font-extrabold font-mono text-white">#1</p>
-            <p className="text-[10px] text-slate-400">Payment Failure</p>
-          </div>
+        <div className="sm:hidden px-4 py-2 text-center border-b border-white/[0.06] bg-[#0E1219]">
+          <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600">
+            versus
+          </span>
         </div>
+
+        <article className="p-5">
+          <div className="flex items-center justify-between gap-2 mb-4">
+            <h3 className="text-[16px] font-bold text-white tracking-tight">
+              Dark Mode
+            </h3>
+            <span className="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-extrabold tracking-wide border bg-slate-500/15 text-slate-400 border-slate-500/30">
+              LOW
+            </span>
+          </div>
+          <dl className="space-y-3 text-sm">
+            <div className="flex justify-between gap-3 items-baseline">
+              <dt className="text-slate-500">Requests</dt>
+              <dd className="font-mono font-semibold text-slate-200">521</dd>
+            </div>
+            <div className="flex justify-between gap-3 items-baseline">
+              <dt className="text-slate-500">Revenue impact</dt>
+              <dd className="font-mono font-semibold text-slate-500 inline-flex items-center gap-1">
+                <TrendingDown className="size-3.5" strokeWidth={2.5} />
+                Low
+              </dd>
+            </div>
+          </dl>
+          <p className="mt-5 text-[12px] text-slate-400 leading-relaxed border-t border-white/[0.06] pt-3">
+            High volume, low business exposure →{" "}
+            <span className="text-slate-300 font-semibold">defer safely</span>.
+          </p>
+        </article>
       </div>
     </div>
   );
 }
 
-export function RevenueRecoveryIllustration() {
+export function PipelineStrip() {
+  const steps = ["Collect", "Understand", "Prioritize", "Act", "Measure"] as const;
   return (
-    <div className="rounded-[20px] border border-border bg-surface p-6 md:p-8 shadow-[0_2px_12px_rgba(0,0,0,0.28)]">
-      <div className="grid md:grid-cols-3 gap-4 mb-6">
+    <nav
+      aria-label="Product workflow"
+      className="flex flex-wrap items-center gap-x-2 gap-y-2 text-[13px] text-slate-400"
+    >
+      {steps.map((step, i) => (
+        <span key={step} className="inline-flex items-center gap-2">
+          <span className="font-semibold text-slate-200">{step}</span>
+          {i < steps.length - 1 && (
+            <span className="text-slate-600" aria-hidden>
+              →
+            </span>
+          )}
+        </span>
+      ))}
+    </nav>
+  );
+}
+
+/** Mini preview of the analytics dashboard — bridges landing → Overview UX */
+export function AnalyticsPreviewCard() {
+  return (
+    <Link
+      href="/business/freshmart-demo"
+      className="group block rounded-[18px] border border-[#6D5DF6]/30 bg-gradient-to-br from-[#1a1430] via-[#12161F] to-[#0E1219] p-5 no-underline shadow-[0_0_40px_rgba(109,93,246,0.12)] hover:border-[#6D5DF6]/50 transition-colors"
+    >
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#A99FFF]">
+            Analytics workspace
+          </p>
+          <h3 className="text-[15px] font-bold text-white mt-1 tracking-tight">
+            See revenue impact ranked live
+          </h3>
+        </div>
+        <span className="text-[11px] font-semibold text-[#C4BBFF] group-hover:translate-x-0.5 transition-transform">
+          Open demo →
+        </span>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 mb-3">
         {[
-          { label: "Exposed", value: "₹3.8L/mo", tone: "text-red-400", hint: "Unresolved critical bugs" },
-          { label: "Focus", value: "Top 3 issues", tone: "text-amber-400", hint: "Highest recovery leverage" },
-          { label: "Recoverable", value: "+18%", tone: "text-emerald-400", hint: "After one sprint cycle" },
+          { label: "At risk", value: "₹2.84L", tone: "text-red-400" },
+          { label: "Critical", value: "18", tone: "text-amber-300" },
+          { label: "Feedback", value: "2,041", tone: "text-emerald-400" },
         ].map((m) => (
-          <div key={m.label} className="rounded-2xl bg-surface-2 border border-white/[0.05] p-4">
-            <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-2">
+          <div
+            key={m.label}
+            className="rounded-xl bg-black/30 border border-white/[0.06] px-2.5 py-2"
+          >
+            <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">
               {m.label}
             </p>
-            <p className={`text-2xl font-extrabold font-mono tracking-tight ${m.tone}`}>
+            <p className={`text-sm font-extrabold font-mono mt-0.5 ${m.tone}`}>
               {m.value}
             </p>
-            <p className="text-[11px] text-slate-500 mt-2">{m.hint}</p>
           </div>
         ))}
       </div>
-      <p className="text-sm text-slate-400 leading-relaxed">
-        Translate frustration into numbers leadership trusts — severity, reach, and revenue in one score.
+
+      <p className="text-[12px] text-slate-400 leading-relaxed">
+        Same Overview you use after analysis — top issues by ₹ / month, AI “fix first”,
+        sentiment, and sprint actions.
       </p>
-    </div>
+    </Link>
   );
 }
 
-export function RoadmapIllustration() {
-  const weeks = [
-    { w: "W1–2", theme: "Stop the bleed", items: "Payment · Auth" },
-    { w: "W3–4", theme: "Stabilize core", items: "Sync · Performance" },
-    { w: "W5–6", theme: "Unlock growth", items: "Onboarding · UX" },
-  ];
-  return (
-    <div className="grid md:grid-cols-3 gap-4">
-      {weeks.map((week, i) => (
-        <div
-          key={week.w}
-          className="rounded-[18px] border border-border bg-surface p-5 shadow-[0_2px_12px_rgba(0,0,0,0.28)]"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] font-mono font-bold text-primary-soft">{week.w}</span>
-            <span className="text-[10px] text-slate-600">Phase {i + 1}</span>
-          </div>
-          <p className="text-base font-bold text-white mb-1">{week.theme}</p>
-          <p className="text-xs text-slate-400">{week.items}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-export function SprintIllustration() {
-  return (
-    <div className="rounded-[20px] border border-border bg-surface p-5 shadow-[0_2px_12px_rgba(0,0,0,0.28)] space-y-3">
-      {[
-        { id: "US-01", title: "Retry failed payments with clearer errors", pts: "5" },
-        { id: "US-02", title: "Extend auth session for premium users", pts: "3" },
-        { id: "US-03", title: "Surface sync status in library view", pts: "2" },
-      ].map((s) => (
-        <div
-          key={s.id}
-          className="flex items-center gap-3 p-3 rounded-xl border border-white/[0.05] bg-surface-2"
-        >
-          <span className="text-[10px] font-mono text-primary-soft shrink-0">{s.id}</span>
-          <p className="text-sm text-slate-200 flex-1 min-w-0 truncate">{s.title}</p>
-          <span className="text-[11px] font-bold font-mono text-slate-400">{s.pts} SP</span>
-        </div>
-      ))}
-      <p className="text-[11px] text-slate-500 pt-1">Jira-ready stories · Export as CSV</p>
-    </div>
-  );
-}
-
-export function ArchitectureIllustration() {
-  return (
-    <div className="rounded-[20px] border border-border bg-surface p-6 shadow-[0_2px_12px_rgba(0,0,0,0.28)]">
-      <div className="grid sm:grid-cols-3 gap-4">
-        {[
-          { t: "Sources", d: "Play Store · CSV · Workspace forms" },
-          { t: "Intelligence", d: "Clean · Cluster · Score · Rank" },
-          { t: "Decisions", d: "Roadmap · Sprint · Evidence · Export" },
-        ].map((layer) => (
-          <div key={layer.t} className="rounded-2xl bg-surface-2 border border-white/[0.05] p-4">
-            <p className="text-sm font-bold text-white mb-2">{layer.t}</p>
-            <p className="text-xs text-slate-400 leading-relaxed">{layer.d}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+/** @deprecated Prefer PriorityContrastExample on landing hero */
+export function DecisionCenterMock() {
+  return <PriorityContrastExample />;
 }

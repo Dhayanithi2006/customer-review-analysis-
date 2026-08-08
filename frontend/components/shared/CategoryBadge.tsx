@@ -21,8 +21,13 @@ export function CategoryBadge({ category }: { category: string }) {
   return <Badge variant={variant}>{category}</Badge>;
 }
 
-export function PriorityBadge({ priority }: { priority: "High" | "Medium" | "Low" }) {
-  const map: Record<string, CategoryVariant> = { High: "high", Medium: "medium", Low: "low" };
+export function PriorityBadge({ priority }: { priority: string }) {
+  const map: Record<string, CategoryVariant> = {
+    Critical: "danger",
+    High: "high",
+    Medium: "medium",
+    Low: "low",
+  };
   return <Badge variant={map[priority] || "default"}>{priority}</Badge>;
 }
 

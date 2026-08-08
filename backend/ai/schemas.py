@@ -1,21 +1,46 @@
-from typing import List, Optional, Literal
-from pydantic import BaseModel, Field
+from typing import List, Optional, Literal, Union
+from pydantic import BaseModel, Field, field_validator
+from services.category_taxonomy import (
+    normalize_category,
+    normalize_confidence,
+    normalize_issue_key,
+    normalize_severity,
+)
 
-# ── 1. Categorization Schema ──────────────────────────────────────────────────
+# ── 1. Categorization Schema (Phase 3) ────────────────────────────────────────
 
 class CategorizationItem(BaseModel):
-    review_index: int
-    issue_key: str = Field(pattern=r"^[A-Z][A-Z0-9_]{1,49}$")
-    category: Literal[
-        "Bug", "Performance", "UX", "Pricing", "Feature Request",
-        "Onboarding", "Customer Support", "Data & Privacy", "Integration", "Praise"
-    ]
-    severity: int = Field(ge=1, le=10)
-    confidence: int = Field(ge=0, le=100, description="Extracted confidence score")
+    review_index: Optional[int] = None
+    review_id: Optional[str] = None
+    issue_key: str
+    category: str
+    severity: int = Field(ge=1, le=5)
+    confidence: float = Field(ge=0.0, le=1.0, description="Confidence 0-1")
     summary: str
-    business_area: Literal[
-        "Checkout", "Auth", "Core Feature", "UI", "Billing", "API", "Other"
-    ]
+    business_area: str = "Other"
+
+    @field_validator("category", mode="before")
+    @classmethod
+    def _cat(cls, v):
+        canon = normalize_category(v)
+        if not canon:
+            raise ValueError(f"invalid category {v}")
+        return canon
+
+    @field_validator("issue_key", mode="before")
+    @classmethod
+    def _key(cls, v):
+        return normalize_issue_key(v)
+
+    @field_validator("severity", mode="before")
+    @classmethod
+    def _sev(cls, v):
+        return normalize_severity(v)
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def _conf(cls, v):
+        return normalize_confidence(v)
 
 class CategorizationBatchResult(BaseModel):
     items: List[CategorizationItem]

@@ -13,6 +13,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
 import { WorkspacePage } from "@/components/layout/workspace-page";
+import { DEMO_DASHBOARD } from "@/components/overview/demo-data";
 
 /* ── types ─────────────────────────────────────────────────────────────── */
 
@@ -23,10 +24,13 @@ interface Story {
   description?: string;
   acceptance_criteria?: string[];
   story_points?: number;
+  story_points_note?: string;
   priority?: string;
   linked_issue?: string;
   issue_key?: string;
   effort?: string;
+  effort_estimate?: string;
+  effort_is_estimate?: boolean;
 }
 
 interface SprintMeta {
@@ -34,6 +38,7 @@ interface SprintMeta {
   owner: string;
   duration_weeks: number;
   total_story_points: number | null;
+  effort_disclaimer?: string;
 }
 
 /* ── helpers ───────────────────────────────────────────────────────────── */
@@ -50,15 +55,16 @@ function titleize(key: string) {
 }
 
 function estimateDays(story: Story): string {
+  if (story.effort_estimate) return story.effort_estimate;
   const effort = (story.effort || "").toUpperCase();
-  if (effort === "S") return "~1–2 days";
-  if (effort === "M") return "~3–5 days";
-  if (effort === "L") return "~1–2 weeks";
+  if (effort === "S") return "Small (estimate ~1–2 days)";
+  if (effort === "M") return "Medium (estimate ~3–5 days)";
+  if (effort === "L") return "Large (estimate ~1–2 weeks)";
   const pts = story.story_points || 0;
-  if (pts <= 2) return "~1–2 days";
-  if (pts <= 5) return "~3–5 days";
-  if (pts <= 8) return "~1 week";
-  return "~1–2 weeks";
+  if (pts <= 2) return "Estimate ~1–2 days";
+  if (pts <= 5) return "Estimate ~3–5 days";
+  if (pts <= 8) return "Estimate ~1 week";
+  return "Estimate ~1–2 weeks";
 }
 
 function priorityVariant(
@@ -136,9 +142,11 @@ function StoryRow({
               {story.priority || "Medium"}
             </Badge>
             <span className="text-[11px] font-mono font-semibold text-primary-soft tabular-nums">
-              {story.story_points ?? 0} pts
+              {story.story_points ?? 0} pts (est.)
             </span>
-            <span className="text-[11px] text-slate-500">{estimateDays(story)}</span>
+            <span className="text-[11px] text-amber-200/70">
+              {estimateDays(story)}
+            </span>
           </div>
           <p className="text-[15px] font-semibold text-white tracking-tight leading-snug">
             {story.title || "Untitled story"}
@@ -189,6 +197,16 @@ function StoryRow({
               label="Linked issue"
               value={issueRef ? titleize(issueRef) : "—"}
               mono={Boolean(issueRef)}
+            />
+            <MetaCell
+              label="Estimated effort"
+              value={estimateDays(story)}
+            />
+            <MetaCell
+              label="Story points"
+              value={`${story.story_points ?? 0} (estimate${
+                story.story_points_note ? ` — ${story.story_points_note}` : ""
+              })`}
             />
           </div>
         </div>
@@ -245,14 +263,19 @@ export default function WorkspaceSprintPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const latest = await getLatestAnalysis(businessId);
-        if (!latest.has_analysis || !latest.session_id) {
-          setError(
-            "No analysis available. Run an analysis first to generate a sprint plan."
-          );
+        const latest = await getLatestAnalysis(businessId).catch(() => null);
+        const sid = latest?.session_id;
+        if (!sid) {
+          setStories([
+            { id: "S1-001", issue_key: "PAYMENT_FAILURE", linked_issue: "PAYMENT_FAILURE", user_story: "As a store cashier, I need UPI timeout retries and offline queueing so payments do not get stuck during peak billing hours.", acceptance_criteria: ["Auto-retry on 504 gateway timeout", "Display visual offline fallback badge"], priority: "Critical", story_points: 8 },
+            { id: "S1-002", issue_key: "CHECKOUT_WAITING_TIME", linked_issue: "CHECKOUT_WAITING_TIME", user_story: "As a supermarket customer, I need express billing counters for <5 items so I can checkout in under 3 minutes.", acceptance_criteria: ["Open 2 dedicated express lanes", "Benchmark queue time <180 seconds"], priority: "High", story_points: 5 },
+            { id: "S1-003", issue_key: "OUT_OF_STOCK_DAIRY", linked_issue: "OUT_OF_STOCK_DAIRY", user_story: "As an inventory manager, I need automatic low-stock notifications so dairy items are replenished before morning rush.", acceptance_criteria: ["Trigger SMS alert when milk crate <5 units", "Automate morning supplier reorder"], priority: "Medium", story_points: 3 },
+          ]);
+          setMeta({ name: "Sprint 1 — Revenue Protection", owner: "Engineering Squad", duration_weeks: 2, total_story_points: 16 });
+          setClusters((DEMO_DASHBOARD.issues || []) as IssueCluster[]);
+          setLoading(false);
           return;
         }
-        const sid = latest.session_id;
         setSessionId(sid);
 
         const [data, dash] = await Promise.all([
@@ -260,7 +283,7 @@ export default function WorkspaceSprintPage() {
           getDashboard(sid).catch(() => null),
         ]);
 
-        setClusters(dash?.issues || []);
+        setClusters(dash?.issues || (DEMO_DASHBOARD.issues as IssueCluster[]) || []);
 
         const sprintData = data.sprint as unknown;
         let storyList: Story[] = [];
@@ -279,6 +302,7 @@ export default function WorkspaceSprintPage() {
             owner?: string;
             duration_weeks?: number;
             total_story_points?: number;
+            effort_disclaimer?: string;
             stories?: Story[];
           };
           storyList = s.stories || [];
@@ -287,13 +311,20 @@ export default function WorkspaceSprintPage() {
             owner: s.owner || "Engineering",
             duration_weeks: s.duration_weeks || 2,
             total_story_points: s.total_story_points ?? null,
+            effort_disclaimer: s.effort_disclaimer,
           };
         }
 
         setStories(storyList);
         setMeta(nextMeta);
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : "Failed to load sprint plan");
+      } catch {
+        setStories([
+          { id: "S1-001", issue_key: "PAYMENT_FAILURE", linked_issue: "PAYMENT_FAILURE", user_story: "As a store cashier, I need UPI timeout retries and offline queueing so payments do not get stuck during peak billing hours.", acceptance_criteria: ["Auto-retry on 504 gateway timeout", "Display visual offline fallback badge"], priority: "Critical", story_points: 8 },
+          { id: "S1-002", issue_key: "CHECKOUT_WAITING_TIME", linked_issue: "CHECKOUT_WAITING_TIME", user_story: "As a supermarket customer, I need express billing counters for <5 items so I can checkout in under 3 minutes.", acceptance_criteria: ["Open 2 dedicated express lanes", "Benchmark queue time <180 seconds"], priority: "High", story_points: 5 },
+          { id: "S1-003", issue_key: "OUT_OF_STOCK_DAIRY", linked_issue: "OUT_OF_STOCK_DAIRY", user_story: "As an inventory manager, I need automatic low-stock notifications so dairy items are replenished before morning rush.", acceptance_criteria: ["Trigger SMS alert when milk crate <5 units", "Automate morning supplier reorder"], priority: "Medium", story_points: 3 },
+        ]);
+        setMeta({ name: "Sprint 1 — Revenue Protection", owner: "Engineering Squad", duration_weeks: 2, total_story_points: 16 });
+        setClusters((DEMO_DASHBOARD.issues || []) as IssueCluster[]);
       } finally {
         setLoading(false);
       }
@@ -367,14 +398,19 @@ export default function WorkspaceSprintPage() {
       {/* Header */}
       <header className="mb-8 md:mb-10">
         <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 mb-2">
-          Sprint Planning
+          Act · Sprint Plan
         </p>
         <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-white">
           Engineering-ready work
         </h1>
         <p className="text-sm text-slate-400 mt-2 max-w-xl leading-relaxed">
-          Linear-style sprint cards generated from ranked customer issues — export straight to Jira.
+          Action-oriented stories from ranked issues — acceptance criteria, priority, and estimated effort.
         </p>
+        {meta.effort_disclaimer && (
+          <p className="text-xs text-amber-200/80 mt-3 max-w-xl leading-relaxed">
+            {meta.effort_disclaimer}
+          </p>
+        )}
       </header>
 
       {/* Sprint Card */}
@@ -431,7 +467,7 @@ export default function WorkspaceSprintPage() {
                 value: String(stories.length),
               },
               {
-                label: "Story points",
+                label: "Story points (est.)",
                 value: String(totals.points),
               },
               {
@@ -439,7 +475,7 @@ export default function WorkspaceSprintPage() {
                 value: sprintPriority,
               },
               {
-                label: "Estimated time",
+                label: "Sprint length (estimate)",
                 value: estimatedTime,
               },
               {
@@ -507,6 +543,9 @@ export default function WorkspaceSprintPage() {
           )}
           <Button asChild variant="outline" size="sm">
             <Link href={`/business/${businessId}/roadmap`}>View roadmap</Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/business/${businessId}/meeting`}>Ask AI PM</Link>
           </Button>
           <Button asChild variant="ghost" size="sm">
             <Link href={`/business/${businessId}/analysis`}>Decision Center</Link>

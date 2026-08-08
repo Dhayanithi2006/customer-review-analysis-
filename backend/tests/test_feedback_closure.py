@@ -47,6 +47,9 @@ def test_update_resolution_status_to_resolved(mock_get_db, api_client):
     mock_db = MagicMock()
     mock_get_db.return_value = mock_db
 
+    mock_db.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
+        data=[{"id": "biz-1", "industry": "Supermarket", "business_name": "FreshMart"}]
+    )
     mock_db.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
         data=[{
             "id": "res-101",

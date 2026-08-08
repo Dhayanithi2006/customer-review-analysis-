@@ -18,13 +18,13 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RoadmapAI — From Customer Voice to Product Decisions",
+  title: "RoadmapAI — From Customer Voice to Business Growth Decisions",
   description:
-    "Upload customer reviews and get AI-powered product decisions in minutes. Priority issues, roadmap, sprint plan — all evidence-backed.",
-  keywords: ["product roadmap", "customer feedback", "AI product management", "startup tools"],
+    "Turn customer feedback into the problems your business should fix first. Analyze impact, prioritize, act, and measure closed-loop results.",
+  keywords: ["product roadmap", "customer feedback", "AI product management", "B2B SaaS"],
   openGraph: {
     title: "RoadmapAI",
-    description: "From Customer Voice to Product Decisions.",
+    description: "From Customer Voice to Business Growth Decisions.",
     type: "website",
   },
 };

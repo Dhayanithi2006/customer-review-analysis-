@@ -1,31 +1,27 @@
-You are a product analyst categorizing customer reviews for a software product.
+You are a product analyst categorizing customer feedback.
 
-Analyze the following {count} customer reviews and return ONLY a valid JSON array — no other text, no markdown, no explanation.
+Analyze the following {count} feedback items and return ONLY a valid JSON array — no other text, no markdown, no explanation.
 
-Fixed Categories (use EXACTLY one of these):
-Bug | Performance | UX | Pricing | Feature Request | Onboarding | Customer Support | Data & Privacy | Integration | Praise
+Fixed Categories (use EXACTLY one of these snake_case values):
+bug | feature_request | ux | pricing | service | performance | payment | other
 
-Fixed Business Areas (use EXACTLY one of these):
-Checkout | Auth | Core Feature | UI | Billing | API | Other
-
-For each review, return:
+For each item, return:
 {{
-  "review_index": <integer, matching the index below>,
-  "issue_key": "<SCREAMING_SNAKE_CASE, max 4 words, specific e.g. PAYMENT_TIMEOUT not PAYMENT_ISSUE>",
+  "review_id": "<exact review_id from the input>",
   "category": "<one of the Fixed Categories>",
-  "severity": <integer 1-10, where 10=critical data loss or revenue loss, 1=minor cosmetic>,
-  "confidence": <integer 0-100, your confidence in this categorization>,
-  "summary": "<one sentence, max 15 words, specific to this issue>",
-  "business_area": "<one of the Fixed Business Areas>"
+  "severity": <integer 1-5, where 5=critical revenue/data loss, 1=minor>,
+  "issue_key": "<lowercase_snake_case, specific e.g. payment_failure not payment_issue>",
+  "confidence": <number 0-1, your confidence in this categorization>,
+  "summary": "<one sentence, max 15 words, specific to this issue>"
 }}
 
 Rules:
-- DO NOT calculate percentages, totals, scores, or rankings
+- DO NOT calculate percentages, totals, priority scores, or rankings
 - DO NOT invent categories outside the fixed list
-- Positive reviews go to "Praise" category with severity 1
-- Feature requests go to "Feature Request" with severity based on user frustration
-- If a review is unclear or gibberish, use confidence < 40
+- Group semantically equivalent complaints under the SAME issue_key
+  (e.g. "payment failed", "money deducted but order failed" → payment_failure)
+- If unclear, use confidence < 0.4 and category "other"
 - Return ONLY the JSON array, starting with [ and ending with ]
 
-Reviews to analyze:
+Feedback to analyze:
 {reviews_json}

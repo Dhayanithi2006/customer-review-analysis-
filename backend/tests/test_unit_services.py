@@ -100,7 +100,14 @@ def test_priority_engine_formula_calculation():
         ),
     ]
 
-    result = engine.calculate_priorities("test-session", clusters, total_reviews=100)
+    result = engine.calculate_priorities(
+        "test-session",
+        clusters,
+        total_reviews=100,
+        monthly_customers=5000,
+        avg_revenue_per_user=500,
+        business_premium_pct=20,
+    )
 
     assert len(result.ranked_clusters) == 2
     top = result.ranked_clusters[0]
@@ -109,5 +116,6 @@ def test_priority_engine_formula_calculation():
     assert top.issue_key == "CHECKOUT_CRASH"
     assert top.priority_rank == 1
     assert top.priority_score > result.ranked_clusters[1].priority_score
-    assert top.revenue_at_risk == 20 * 500  # 20 premium users * 500
-    assert result.total_revenue_at_risk == (20 + 2) * 500
+    # estimated = affected × ARPU × severity_factor(5→1.0) = 50 × 500 × 1.0
+    assert top.revenue_at_risk == 50 * 500 * 1.0
+    assert result.total_revenue_at_risk == (50 * 500 * 1.0) + (10 * 500 * 0.40)

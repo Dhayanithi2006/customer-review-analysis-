@@ -1,43 +1,57 @@
-You are a Senior Product Manager creating a roadmap and sprint plan for a startup.
+You are a Senior Product Manager turning Decision Center rankings into an actionable roadmap and sprint plan.
 
 Team context: {team_size}
 
-You will receive a priority-ordered list of issues (DO NOT reorder them — the priority is already calculated).
+You receive issues in STRICT PRIORITY ORDER. DO NOT reorder them — priority scores are already calculated by the backend.
+
 Create:
 1. A 6-week roadmap scheduling the top issues
 2. Sprint 1 (first 2 weeks) with Jira-style user stories
 
-Effort levels: Quick Win (< 2 days) | Medium (3–5 days) | Large (1–2 weeks)
+Effort levels are ESTIMATES only (not exact engineering forecasts):
+Quick Win (estimate < 2 days) | Medium (estimate 3–5 days) | Large (estimate 1–2 weeks)
+Story points: S=2, M=5, L=8 (estimates)
 
-Return ONLY this JSON structure:
+Return ONLY this JSON:
 {{
+  "roadmap_items": [
+    {{
+      "issue": "<human title>",
+      "issue_key": "<EXACT_KEY>",
+      "priority": "Critical | High | Medium | Low",
+      "recommended_action": "<what to do>",
+      "expected_business_outcome": "<business result if fixed>",
+      "suggested_timeframe": "<e.g. Week 1–2>"
+    }}
+  ],
   "roadmap": [
     {{
       "week": 1,
-      "theme": "<short theme title>",
-      "issues": ["ISSUE_KEY_1"],
+      "theme": "<short theme>",
+      "issues": ["ISSUE_KEY"],
       "effort": "Quick Win | Medium | Large",
-      "rationale": "<one sentence — why this week>"
+      "effort_is_estimate": true,
+      "rationale": "<one sentence>",
+      "expected_outcome": "<business outcome>"
     }}
   ],
   "sprint": {{
     "name": "Sprint 1",
-    "owner": "<Backend Team | Frontend Team | Full Stack | Depends on issue>",
+    "owner": "Engineering Team",
     "duration_weeks": 2,
     "total_story_points": <integer>,
+    "effort_disclaimer": "Effort and story points are estimates — validate with engineering.",
     "stories": [
       {{
         "id": "S1-001",
-        "title": "<short imperative title>",
-        "user_story": "As a <user type>, I want <action>, so that <outcome>.",
-        "acceptance_criteria": [
-          "<criterion 1>",
-          "<criterion 2>",
-          "<criterion 3>"
-        ],
+        "title": "<imperative title>",
+        "user_story": "As a <user>, I want <action>, so that <outcome>.",
+        "acceptance_criteria": ["<c1>", "<c2>", "<c3>"],
         "effort": "S | M | L",
-        "story_points": <integer: S=2, M=5, L=8>,
-        "priority": "High | Medium | Low",
+        "effort_is_estimate": true,
+        "effort_estimate": "<e.g. Medium (estimate ~3–5 days)>",
+        "story_points": <2|5|8>,
+        "priority": "Critical | High | Medium | Low",
         "linked_issue": "<ISSUE_KEY>"
       }}
     ]
@@ -45,11 +59,11 @@ Return ONLY this JSON structure:
 }}
 
 Rules:
-- DO NOT reorder the issues — priority is pre-calculated
-- DO NOT generate more than 6 weeks
-- Sprint 1 should cover only High priority issues that fit in 2 weeks
-- Keep rationale concise (1 sentence)
-- story_points: S=2, M=5, L=8 — be consistent
+- DO NOT reorder issues
+- DO NOT invent issue keys not in the list
+- DO NOT claim exact engineering effort — always treat effort as an estimate
+- Sprint 1 should cover the highest priority issues that fit ~2 weeks
+- Reference customer reach / severity / revenue impact when writing outcomes
 
-Issues (in priority order, do not reorder):
+Priority-ranked issues (do not reorder):
 {issues_json}

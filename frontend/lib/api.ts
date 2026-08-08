@@ -174,9 +174,11 @@ export async function getEvidence(sessionId: string, issueKey: string) {
 
 // ── Roadmap ───────────────────────────────────────────────────────────────
 export async function getRoadmap(sessionId: string) {
-  return apiFetch<{ roadmap: import("./types").RoadmapWeek[] }>(
-    `/results/${sessionId}/roadmap`
-  );
+  return apiFetch<{
+    roadmap: import("./types").RoadmapWeek[];
+    items?: import("./types").RoadmapItem[];
+    effort_disclaimer?: string;
+  }>(`/results/${sessionId}/roadmap`);
 }
 
 // ── Sprint ────────────────────────────────────────────────────────────────
@@ -184,16 +186,24 @@ export async function getSprint(sessionId: string) {
   return apiFetch<{ sprint: import("./types").Sprint }>(`/results/${sessionId}/sprint`);
 }
 
-// ── Meeting ───────────────────────────────────────────────────────────────
+// ── Meeting / AI Product Manager ──────────────────────────────────────────
 export async function getSmartQuestions(sessionId: string): Promise<string[]> {
   const r = await apiFetch<{ questions: string[] }>(`/meeting/${sessionId}/questions`);
   return r.questions;
 }
 
+export async function getAiPmBriefing(sessionId: string) {
+  return apiFetch<{
+    session_id: string;
+    briefing: import("./types").AiPmBriefing;
+    ai_recommendation?: string;
+  }>(`/meeting/${sessionId}/briefing`);
+}
+
 export async function sendMeetingMessage(
   sessionId: string,
   message: string
-): Promise<{ reply: string; referenced_issues: string[] }> {
+): Promise<{ reply: string; referenced_issues: string[]; briefing?: import("./types").AiPmBriefing }> {
   return apiFetch(`/meeting/${sessionId}/message`, {
     method: "POST",
     body: JSON.stringify({ message }),
@@ -225,8 +235,10 @@ export interface ResolutionImpact {
   improved_count: number;
   somewhat_improved_count: number;
   not_improved_count: number;
+  effective_improvements?: number;
   improvement_percentage: number;
   is_reopened: boolean;
+  requires_attention?: boolean;
   threshold: number;
 }
 
@@ -236,7 +248,18 @@ export async function recordBusinessAction(
   actionTaken: string,
   status: string = "ACTION_TAKEN"
 ) {
-  return apiFetch<{ success: boolean; status: string; action_taken: string }>(
+  return apiFetch<{
+    success: boolean;
+    status: string;
+    action_taken: string;
+    followup?: {
+      sent_count?: number;
+      eligible_count?: number;
+      message?: string;
+      followups_triggered?: boolean;
+    } | null;
+    requires_attention?: boolean;
+  }>(
     `/business/${businessId}/issues/${issueKey}/action`,
     {
       method: "POST",

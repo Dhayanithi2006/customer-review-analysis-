@@ -1,0 +1,172 @@
+{
+  "file": "sentiment-analysis.csv",
+  "engine": "VADER",
+  "thresholds": {
+    "positive": "> 0.35",
+    "negative": "< -0.05",
+    "neutral": "else"
+  },
+  "rows": 96,
+  "accuracy": 0.8438,
+  "correct": 81,
+  "label_distribution": {
+    "positive": 53,
+    "negative": 43
+  },
+  "prediction_distribution": {
+    "positive": 46,
+    "negative": 38,
+    "neutral": 12
+  },
+  "compound_bands": {
+    "strong_pos (>=0.5)": 40,
+    "neg (-0.5..-0.05)": 22,
+    "neutral (-0.05..0.35)": 12,
+    "strong_neg (<-0.5)": 16,
+    "pos (0.35-0.5)": 6
+  },
+  "confusion_matrix": {
+    "positive": {
+      "positive": 44,
+      "neutral": 8,
+      "negative": 1
+    },
+    "negative": {
+      "negative": 37,
+      "neutral": 4,
+      "positive": 2
+    },
+    "neutral": {}
+  },
+  "per_class": {
+    "positive": {
+      "precision": 0.9565,
+      "recall": 0.8302,
+      "f1": 0.8889,
+      "support": 53,
+      "tp": 44
+    },
+    "negative": {
+      "precision": 0.9737,
+      "recall": 0.8605,
+      "f1": 0.9136,
+      "support": 43,
+      "tp": 37
+    },
+    "neutral": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "support": 0,
+      "tp": 0
+    }
+  },
+  "macro_f1": 0.6008,
+  "mismatches": [
+    {
+      "text": "The quality of this product is subpar.",
+      "label": "negative",
+      "pred": "neutral",
+      "compound": 0.0,
+      "source": "Amazon Reviews"
+    },
+    {
+      "text": "I can't stop listening to this song. It's incredible!",
+      "label": "positive",
+      "pred": "neutral",
+      "compound": 0.2914,
+      "source": "Spotify"
+    },
+    {
+      "text": "The customer service at this store is top-notch.",
+      "label": "positive",
+      "pred": "neutral",
+      "compound": 0.0,
+      "source": "Yelp Reviews"
+    },
+    {
+      "text": "The product I ordered never arrived. Terrible service.",
+      "label": "negative",
+      "pred": "positive",
+      "compound": 0.3724,
+      "source": "Online Store"
+    },
+    {
+      "text": "I can't get enough of this band. Their music is incredible!",
+      "label": "positive",
+      "pred": "neutral",
+      "compound": 0.0,
+      "source": "Music Review"
+    },
+    {
+      "text": "The customer service at this store is exceptional. They went above and beyond.",
+      "label": "positive",
+      "pred": "neutral",
+      "compound": 0.0,
+      "source": "Retail Store"
+    },
+    {
+      "text": "The live concert was electrifying! The band's energy was contagious.",
+      "label": "positive",
+      "pred": "negative",
+      "compound": -0.1511,
+      "source": "Event Review"
+    },
+    {
+      "text": "The concert was mind-blowing! The band knows how to put on a show.",
+      "label": "positive",
+      "pred": "neutral",
+      "compound": 0.0,
+      "source": "Event Review"
+    },
+    {
+      "text": "The website loading speed is frustratingly slow. Needs improvement.",
+      "label": "negative",
+      "pred": "neutral",
+      "compound": 0.0,
+      "source": "Website Review"
+    },
+    {
+      "text": "The product I ordered never arrived. Poor customer service.",
+      "label": "negative",
+      "pred": "positive",
+      "compound": 0.3724,
+      "source": "Online Store"
+    },
+    {
+      "text": "The website navigation is smooth and intuitive. I found what I needed quickly.",
+      "label": "positive",
+      "pred": "neutral",
+      "compound": 0.0,
+      "source": "Website Testimonial"
+    },
+    {
+      "text": "This book kept me hooked from start to finish. A captivating read!",
+      "label": "positive",
+      "pred": "neutral",
+      "compound": 0.0,
+      "source": "Goodreads"
+    },
+    {
+      "text": "The website loading speed is frustratingly slow. Needs improvement.",
+      "label": "negative",
+      "pred": "neutral",
+      "compound": 0.0,
+      "source": "Website Review"
+    },
+    {
+      "text": "The quality of this product is subpar.",
+      "label": "negative",
+      "pred": "neutral",
+      "compound": 0.0,
+      "source": "Amazon Reviews"
+    },
+    {
+      "text": "I can't stop listening to this song. It's incredible!",
+      "label": "positive",
+      "pred": "neutral",
+      "compound": 0.2914,
+      "source": "Spotify"
+    }
+  ]
+}

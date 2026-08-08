@@ -25,10 +25,10 @@ def render_follow_up_template(
     action_taken: str,
     token: str,
     base_url: str = None
-) -> tuple[str, str]:
+) -> tuple[str, str, str]:
     """
     Renders deterministic subject and body for follow-up email.
-    No LLM dependency used.
+    Link uses only the secure token — never internal database IDs.
     """
     base_url = (base_url or FRONTEND_URL or "http://localhost:3000").rstrip("/")
     follow_up_link = f"{base_url}/follow-up/{token}"
@@ -39,12 +39,12 @@ def render_follow_up_template(
 You previously shared feedback regarding:
 "{issue_title}"
 
-Here is what we did to fix it:
+We wanted to confirm that action has been taken:
 "{action_taken}"
 
-We would love to know if your experience has improved!
+Has your experience improved?
 
-Please click the link below to share your quick feedback (takes 5 seconds):
+Please click the link below to share a quick response (takes about 5 seconds):
 {follow_up_link}
 
 Thank you for helping us improve {business_name}.

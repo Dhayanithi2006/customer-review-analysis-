@@ -21,7 +21,7 @@
   --color-danger-border:  rgba(239, 68, 68, 0.28);
 
   /* Surfaces — dark premium */
-  --color-bg:             #0B1020;
+  --color-bg:             #0B0E14;
   --color-surface:        #111827;
   --color-surface-2:      #161E2E;
   --color-surface-3:      #1C2538;
@@ -85,8 +85,8 @@
   /* Layout */
   --sidebar-width:        260px;
   --sidebar-collapsed:    72px;
-  --topnav-height:        56px;
-  --content-max:          1280px;
+  --topnav-height:        64px;
+  --content-max:          1400px;
 
   /* Motion — subtle */
   --ease-out:             cubic-bezier(0.16, 1, 0.3, 1);
@@ -117,7 +117,7 @@
 
 /* ── Tailwind v4 theme bridge (no circular refs) ───────────────────────── */
 @theme inline {
-  --color-background: #0B1020;
+  --color-background: #0B0E14;
   --color-foreground: #FFFFFF;
   --color-surface: #111827;
   --color-surface-2: #161E2E;
@@ -614,10 +614,14 @@ p { color: var(--color-text-secondary); line-height: var(--leading-relaxed); }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-@keyframes pulse-soft {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.55; }
+@keyframes wave {
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(14deg); }
+  40% { transform: rotate(-8deg); }
+  60% { transform: rotate(10deg); }
+  80% { transform: rotate(-4deg); }
 }
+
 
 .animate-fade-in { animation: fadeIn 0.35s var(--ease-out) both; }
 .animate-fade-in-up { animation: fadeInUp 0.45s var(--ease-out) both; }

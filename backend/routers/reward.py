@@ -50,27 +50,40 @@ class UserBalanceResponse(BaseModel):
 
 # ── Helper Functions ──────────────────────────────────────────────────────────
 
-def calculate_user_balance(db, business_id: str, user_token: str) -> int:
-    """Calculates customer balance from feedback_rewards ledger."""
+def calculate_user_balance(db, business_id: str, identity_key: str) -> int:
+    """Calculates customer balance from feedback_rewards ledger by identity_hash or user_token."""
     try:
+        # Prefer identity_hash column when present
         res = (
             db.table("feedback_rewards")
             .select("points_awarded")
             .eq("business_id", business_id)
-            .eq("user_token", user_token)
+            .eq("identity_hash", identity_key)
+            .execute()
+        )
+        if res.data:
+            return sum(int(row.get("points_awarded", 0) or 0) for row in res.data)
+
+        # Fallback: legacy rows keyed only by user_token / device: prefix
+        token = identity_key.split("device:", 1)[-1] if identity_key.startswith("device:") else identity_key
+        res = (
+            db.table("feedback_rewards")
+            .select("points_awarded")
+            .eq("business_id", business_id)
+            .eq("user_token", token)
             .execute()
         )
         if not res.data:
             return 0
-        return sum(int(row.get("points_awarded", 0)) for row in res.data)
+        return sum(int(row.get("points_awarded", 0) or 0) for row in res.data)
     except Exception as e:
         logger.warning(f"Error calculating balance: {e}")
         return 0
 
 
-def check_cooldown_status(db, business_id: str, user_token: str, cooldown_hours: int):
+def check_cooldown_status(db, business_id: str, identity_key: str, cooldown_hours: int):
     """
-    Checks if a reward was awarded within the last cooldown_hours.
+    Checks if a reward was awarded within the last cooldown_hours for this identity.
     Returns (is_in_cooldown: bool, next_reward_at: Optional[datetime]).
     """
     if cooldown_hours <= 0:
@@ -81,12 +94,26 @@ def check_cooldown_status(db, business_id: str, user_token: str, cooldown_hours:
             db.table("feedback_rewards")
             .select("created_at")
             .eq("business_id", business_id)
-            .eq("user_token", user_token)
+            .eq("identity_hash", identity_key)
             .eq("reward_status", "awarded")
             .order("created_at", desc=True)
             .limit(1)
             .execute()
         )
+
+        if not res.data:
+            # Legacy fallback by user_token
+            token = identity_key.split("device:", 1)[-1] if identity_key.startswith("device:") else identity_key
+            res = (
+                db.table("feedback_rewards")
+                .select("created_at")
+                .eq("business_id", business_id)
+                .eq("user_token", token)
+                .eq("reward_status", "awarded")
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
 
         if not res.data:
             return False, None
@@ -120,6 +147,8 @@ async def check_reward_eligibility(business_id: str, body: EligibilityCheckReque
     Applies mode, text length, rating, spam, and per-business cooldown rules.
     Does not require login or account creation.
     """
+    from services.identity_hash import build_identity_hash
+
     db = get_db()
 
     # 1. Fetch business & settings
@@ -136,7 +165,8 @@ async def check_reward_eligibility(business_id: str, body: EligibilityCheckReque
     min_length = int(settings.get("minimum_feedback_length", 10))
     cooldown_hours = int(settings.get("cooldown_hours", 168))
 
-    current_balance = calculate_user_balance(db, business_id, body.user_token)
+    identity_key = build_identity_hash(user_token=body.user_token)
+    current_balance = calculate_user_balance(db, business_id, identity_key)
 
     # 2. Check Mode & Reward settings
     if mode != "reward":
@@ -184,7 +214,7 @@ async def check_reward_eligibility(business_id: str, body: EligibilityCheckReque
 
     # 4. Check Cooldown
     in_cooldown, next_eligible_at = check_cooldown_status(
-        db, business_id, body.user_token, cooldown_hours
+        db, business_id, identity_key, cooldown_hours
     )
 
     if in_cooldown and next_eligible_at:
@@ -217,24 +247,37 @@ async def get_user_reward_balance(
     """
     Public endpoint — fetches total point balance for an anonymous user_token.
     """
+    from services.identity_hash import build_identity_hash
+
     db = get_db()
 
     biz = db.table("businesses").select("id").eq("id", business_id).execute().data
     if not biz:
         raise HTTPException(status_code=404, detail="Business not found.")
 
-    balance = calculate_user_balance(db, business_id, user_token)
+    identity_key = build_identity_hash(user_token=user_token)
+    balance = calculate_user_balance(db, business_id, identity_key)
 
     # Count claimed rewards
     res = (
         db.table("feedback_rewards")
         .select("id")
         .eq("business_id", business_id)
-        .eq("user_token", user_token)
+        .eq("identity_hash", identity_key)
         .eq("reward_status", "awarded")
         .execute()
     )
     total_claimed = len(res.data) if res.data else 0
+    if total_claimed == 0:
+        res = (
+            db.table("feedback_rewards")
+            .select("id")
+            .eq("business_id", business_id)
+            .eq("user_token", user_token)
+            .eq("reward_status", "awarded")
+            .execute()
+        )
+        total_claimed = len(res.data) if res.data else 0
 
     return UserBalanceResponse(
         business_id=business_id,

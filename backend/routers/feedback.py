@@ -1,53 +1,83 @@
 """
-Feedback Router — Public Feedback Submission Endpoint (Phase 2)
-GET  /feedback/{business_id}  → Returns public form config (dynamic per mode & settings)
-POST /feedback/{business_id}  → Accepts a single review from the public form with validation
+Feedback Router — Public Feedback Submission (Phase 2 MVP)
+GET  /feedback/{business_id}  → Public form config
+POST /feedback/{business_id}  → Submit feedback (QR / direct URL)
 
-Architecture:
-  Phone/Browser → GET /feedback/{id} (to get form config)
-  Phone/Browser → POST /feedback/{id} (to submit review)
-  → Stored in feedback_submissions (buffer)
-  → Migrated into reviews table when owner runs analysis
-
-Engagement Modes:
-  REWARD MODE      — Points & incentives ("Thank you! You've earned 10 points.")
-  IMPROVEMENT MODE — Formal/Institutional ("Thank you for sharing your experience.")
-  PRODUCT MODE     — Feature/roadmap ("Feedback received. Your feedback can help shape future product improvements.")
+Collection sources (MVP): qr | direct | csv | sample
+Telegram / Play Store / OAuth are out of scope.
 """
+import re
 import uuid
-from typing import Optional
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from typing import Optional, Literal
+from fastapi import APIRouter, HTTPException, Request, Header
+from pydantic import BaseModel, Field, field_validator
 from database import get_db
 from core.logging import get_logger
+from core.ownership import assert_business_owner
 from services.spam_detector import is_spam
+from services.identity_hash import build_identity_hash
 from routers.feedback_settings import _get_or_create_settings, _get_engagement_mode
+from domain.enums import LEGACY_SOURCE_MAP, MVP_FEEDBACK_SOURCES
 
 logger = get_logger("routers.feedback")
 
 router = APIRouter(prefix="/feedback", tags=["Feedback"])
 
 VALID_FEEDBACK_TAGS = {"Bug", "Feature Request", "Performance", "UX", "Praise", "Other"}
+EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+PUBLIC_SOURCES = {"qr", "direct"}
+
+
+def normalize_feedback_source(raw: Optional[str], default: str = "direct") -> str:
+    value = (raw or default).strip().lower()
+    value = LEGACY_SOURCE_MAP.get(value, value)
+    if value not in MVP_FEEDBACK_SOURCES:
+        return default
+    return value
 
 
 # ── Request / Response Schemas ───────────────────────────────────────────────
 
 class FeedbackSubmitRequest(BaseModel):
-    text: str = Field(..., min_length=5, max_length=2000,
-                      description="Customer feedback text.")
-    rating: Optional[int] = Field(default=None, ge=1, le=5)
+    text: str = Field(..., min_length=1, max_length=2000,
+                      description="Customer feedback text (required, non-empty).")
+    rating: int = Field(..., ge=1, le=5, description="Star rating 1-5 (required).")
     customer_name: Optional[str] = Field(default=None, max_length=80)
     customer_email: Optional[str] = Field(default=None, max_length=200)
+    customer_phone: Optional[str] = Field(default=None, max_length=32)
     feedback_tag: Optional[str] = Field(default=None, description="Bug | Feature Request | Performance | UX | Praise | Other")
     user_token: Optional[str] = Field(default=None, description="Anonymous customer UUID token")
+    source: Literal["qr", "direct"] = Field(
+        default="direct",
+        description="qr = scanned QR code; direct = opened feedback URL",
+    )
+
+    @field_validator("text")
+    @classmethod
+    def text_not_blank(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("Feedback text must not be empty.")
+        return v
+
+    @field_validator("customer_email")
+    @classmethod
+    def email_optional_but_valid(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        cleaned = v.strip()
+        if not cleaned:
+            return None
+        if not EMAIL_RE.match(cleaned) or len(cleaned) > 200:
+            raise ValueError("Email must be a valid address if provided.")
+        return cleaned
 
     model_config = {
         "json_schema_extra": {
             "example": {
                 "text": "The checkout kept freezing on the payment step. Very frustrating.",
                 "rating": 2,
-                "customer_name": "Priya S.",
-                "feedback_tag": "Bug"
+                "customer_email": "priya@example.com",
+                "source": "qr",
             }
         }
     }
@@ -122,7 +152,7 @@ def _build_mode_dynamic_copy(settings: dict, business_name: str, industry: str) 
         "success": success_msg,
         "show_reward_promise": False,
         "show_tag_selector": True,
-        "requires_rating": False,
+        "requires_rating": True,
     }
 
 
@@ -166,7 +196,7 @@ async def get_feedback_form_config(business_id: str):
         mode_success_message=copy["success"],
         show_reward_promise=copy["show_reward_promise"],
         show_tag_selector=copy["show_tag_selector"],
-        requires_rating=copy["requires_rating"],
+        requires_rating=True,
         minimum_feedback_length=int(settings.get("minimum_feedback_length", 10)),
         points_per_feedback=int(settings.get("points_per_feedback", 10)),
         reward_enabled=bool(settings.get("reward_enabled", False)),
@@ -179,15 +209,8 @@ async def get_feedback_form_config(business_id: str):
 async def submit_feedback(business_id: str, body: FeedbackSubmitRequest):
     """
     Public endpoint — no auth required.
-    Accepts a single feedback submission from the public form.
-
-    Flow:
-    1. Validate business exists & fetch settings
-    2. Check minimum length validation according to business settings
-    3. Spam-check the text
-    4. Store in feedback_submissions buffer table
-    5. Evaluate & record reward in feedback_rewards ledger
-    6. Return mode-specific engagement success response with points balance & cooldown status
+    Validates business_id, rating 1-5, non-empty text, optional email.
+    Stores into feedback_submissions with the correct business_id + source (qr|direct).
     """
     from routers.reward import calculate_user_balance, check_cooldown_status
     from services.abuse_detector import is_rate_limited, is_duplicate_text
@@ -203,108 +226,128 @@ async def submit_feedback(business_id: str, body: FeedbackSubmitRequest):
     )
 
     if not biz:
+        # #region agent log
+        try:
+            import json, time
+            from pathlib import Path
+            _p = Path(__file__).resolve().parents[2] / "debug-74d1c8.log"
+            with open(_p, "a", encoding="utf-8") as _f:
+                _f.write(json.dumps({"sessionId":"74d1c8","hypothesisId":"C","location":"feedback.py:submit","message":"business not found","data":{"business_id":business_id},"timestamp":int(time.time()*1000)})+"\n")
+        except Exception:
+            pass
+        # #endregion
         raise HTTPException(
             status_code=404,
-            detail="Business not found."
+            detail="Business not found. This feedback link is invalid or expired."
         )
 
     row = biz[0]
+    # Isolation: path business_id only
+    business_id = row["id"]
     industry = row["industry"]
     settings = _get_or_create_settings(db, business_id, industry)
+    # #region agent log
+    try:
+        import json, time
+        from pathlib import Path
+        _p = Path(__file__).resolve().parents[2] / "debug-74d1c8.log"
+        with open(_p, "a", encoding="utf-8") as _f:
+            _f.write(json.dumps({"sessionId":"74d1c8","hypothesisId":"D","location":"feedback.py:submit","message":"settings loaded","data":{"business_id":business_id,"industry":industry,"mode":settings.get("feedback_mode"),"reward_enabled":bool(settings.get("reward_enabled", False)),"cooldown_hours":settings.get("cooldown_hours")},"timestamp":int(time.time()*1000)})+"\n")
+    except Exception:
+        pass
+    # #endregion
     copy = _build_mode_dynamic_copy(settings, row["business_name"], industry)
 
     mode = copy["mode"]
-    min_length = int(settings.get("minimum_feedback_length", 10))
+    min_length = max(1, int(settings.get("minimum_feedback_length", 5)))
     reward_enabled = bool(settings.get("reward_enabled", False))
     points_per_feedback = int(settings.get("points_per_feedback", 10))
     cooldown_hours = int(settings.get("cooldown_hours", 168))
 
-    # Anonymous user token handling
-    user_token = body.user_token.strip() if body.user_token else str(uuid.uuid4())
+    source = normalize_feedback_source(body.source, default="direct")
+    if source not in PUBLIC_SOURCES:
+        source = "direct"
 
-    # ── Rate Limiting Protection ──────────────────────────────────────────────
+    user_token = body.user_token.strip() if body.user_token else str(uuid.uuid4())
+    identity_hash = build_identity_hash(
+        email=body.customer_email,
+        phone=body.customer_phone,
+        user_token=user_token,
+    )
+
     if is_rate_limited(user_token):
         raise HTTPException(
             status_code=429,
             detail="Too many requests. Please wait a few seconds before submitting feedback again."
         )
 
-    # ── Minimum length validation ─────────────────────────────────────────────
     text = body.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Feedback text must not be empty.")
     if len(text) < min_length:
         raise HTTPException(
             status_code=400,
             detail=f"Feedback is too short. Please enter at least {min_length} characters."
         )
 
-    if copy["requires_rating"] and body.rating is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Rating is required for this feedback."
-        )
+    if body.rating is None or not (1 <= int(body.rating) <= 5):
+        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5.")
 
-    # ── Spam detection ────────────────────────────────────────────────────────
     if is_spam(text):
-        # Return 200 (silent reject) to prevent bot reverse engineering
         return {
             "success": True,
             "message": copy["success"],
             "user_token": user_token,
             "engagement_mode": mode,
             "points_earned": 0,
-            "current_balance": calculate_user_balance(db, business_id, user_token),
+            "current_balance": calculate_user_balance(db, business_id, identity_hash),
             "reward_eligible": False,
             "submission_id": None,
         }
 
-    # Check for exact duplicate submission text from same token
     is_duplicate_submission = is_duplicate_text(business_id, user_token, text)
 
-    # ── Validate feedback tag ─────────────────────────────────────────────────
     feedback_tag = None
     if body.feedback_tag:
         tag = body.feedback_tag.strip()
         if tag in VALID_FEEDBACK_TAGS:
             feedback_tag = tag
 
-    # ── Store submission (Legitimate feedback is ALWAYS stored for AI analysis) ──
     submission_id = str(uuid.uuid4())
-
     submission_row = {
         "id":              submission_id,
         "business_id":     business_id,
         "raw_text":        text,
+        "rating":          int(body.rating),
         "engagement_mode": mode,
+        "source":          source,
     }
-    if body.rating:
-        submission_row["rating"] = body.rating
     if body.customer_name:
         submission_row["customer_name"] = body.customer_name[:80]
     if body.customer_email:
         submission_row["customer_email"] = body.customer_email[:200]
+        submission_row["follow_up_eligible"] = True
     if feedback_tag:
         submission_row["feedback_tag"] = feedback_tag
 
     try:
         db.table("feedback_submissions").insert(submission_row).execute()
         logger.info(
-            f"Feedback submitted: business={business_id} mode={mode} "
+            f"Feedback submitted: business={business_id} source={source} "
             f"id={submission_id} rating={body.rating}"
         )
     except Exception as e:
         logger.error(f"Failed to store feedback submission: {e}")
         raise HTTPException(status_code=500, detail="Failed to record feedback. Please try again.")
 
-    # ── Reward Ledger Evaluation ──────────────────────────────────────────────
     points_earned = 0
     reward_eligible = False
     reward_status = "ineligible"
     next_reward_at = None
 
     if mode == "reward" and reward_enabled:
-        # Check cooldown
         in_cooldown, next_eligible_at = check_cooldown_status(
-            db, business_id, user_token, cooldown_hours
+            db, business_id, identity_hash, cooldown_hours
         )
 
         if is_duplicate_submission or (in_cooldown and next_eligible_at):
@@ -318,20 +361,20 @@ async def submit_feedback(business_id: str, body: FeedbackSubmitRequest):
             points_earned = points_per_feedback
             reward_eligible = True
 
-    # Record in feedback_rewards ledger
     try:
         db.table("feedback_rewards").insert({
             "id":                     str(uuid.uuid4()),
             "business_id":            business_id,
             "feedback_id":            submission_id,
             "user_token":             user_token,
+            "identity_hash":          identity_hash,
             "points_awarded":         points_earned,
             "reward_status":          reward_status,
         }).execute()
     except Exception as e:
         logger.warning(f"Failed to write to feedback_rewards ledger: {e}")
 
-    current_balance = calculate_user_balance(db, business_id, user_token)
+    current_balance = calculate_user_balance(db, business_id, identity_hash)
 
     return {
         "success":         True,
@@ -344,20 +387,24 @@ async def submit_feedback(business_id: str, body: FeedbackSubmitRequest):
         "reward_eligible": reward_eligible,
         "next_reward_at":  next_reward_at,
         "show_reward":     mode == "reward" and reward_enabled,
+        "source":          source,
     }
 
 
 @router.get("/{business_id}/pending")
-async def get_pending_submissions(business_id: str):
+async def get_pending_submissions(
+    business_id: str,
+    request: Request,
+    x_owner_token: Optional[str] = Header(None),
+):
     """
     Workspace-facing endpoint — returns count and list of unprocessed submissions.
     Used by the workspace overview to show the pending submissions counter.
     """
     db = get_db()
-
-    biz = db.table("businesses").select("id,business_name").eq("id", business_id).execute().data
-    if not biz:
-        raise HTTPException(status_code=404, detail="Business not found.")
+    owner_biz = assert_business_owner(
+        business_id, request=request, x_owner_token=x_owner_token, db=db
+    )
 
     total_result = (
         db.table("feedback_submissions")
@@ -388,7 +435,7 @@ async def get_pending_submissions(business_id: str):
 
     return {
         "business_id":     business_id,
-        "business_name":   biz[0]["business_name"],
+        "business_name":   owner_biz.get("business_name") or "",
         "total_pending":   total_pending,
         "total_all_time":  all_time.count or 0,
         "samples":         samples,
@@ -402,7 +449,11 @@ async def get_pending_submissions(business_id: str):
 
 
 @router.post("/{business_id}/process")
-async def process_submissions_into_pipeline(business_id: str):
+async def process_submissions_into_pipeline(
+    business_id: str,
+    request: Request,
+    x_owner_token: Optional[str] = Header(None),
+):
     """
     Workspace-facing endpoint — migrates pending feedback_submissions
     into the reviews table and fires the analysis pipeline.
@@ -411,6 +462,7 @@ async def process_submissions_into_pipeline(business_id: str):
     import asyncio
 
     db = get_db()
+    assert_business_owner(business_id, request=request, x_owner_token=x_owner_token, db=db)
 
     biz = db.table("businesses").select("id,business_name,industry").eq("id", business_id).execute().data
     if not biz:
@@ -418,7 +470,7 @@ async def process_submissions_into_pipeline(business_id: str):
 
     pending = (
         db.table("feedback_submissions")
-        .select("id,raw_text,rating,submitted_at,engagement_mode")
+        .select("id,raw_text,rating,submitted_at,engagement_mode,source,customer_email")
         .eq("business_id", business_id)
         .is_("session_id", "null")
         .order("submitted_at", desc=False)
@@ -442,10 +494,17 @@ async def process_submissions_into_pipeline(business_id: str):
 
     session_id = str(uuid.uuid4())
 
+    # Prefer a concrete channel when the batch is homogeneous; default qr for mixed QR/direct.
+    sources = {
+        normalize_feedback_source(sub.get("source"), default="qr")
+        for sub in pending
+    }
+    session_source = next(iter(sources)) if len(sources) == 1 else "qr"
+
     db.table("sessions").insert({
         "id":            session_id,
         "filename":      f"form_submissions:{business_id}",
-        "source":        "qr_form",
+        "source":        session_source,
         "team_size":     "small_team",
         "status":        "pending",
         "total_reviews": len(pending),
@@ -454,36 +513,29 @@ async def process_submissions_into_pipeline(business_id: str):
 
     review_rows = []
     for sub in pending:
-        review_rows.append({
+        row = {
             "id":          str(uuid.uuid4()),
             "session_id":  session_id,
             "raw_text":    sub["raw_text"],
-            "source":      "qr_form",
+            "source":      normalize_feedback_source(sub.get("source"), default="qr"),
             "rating":      sub.get("rating"),
             "review_date": sub.get("submitted_at", "")[:10] if sub.get("submitted_at") else None,
-        })
+        }
+        if sub.get("customer_email"):
+            row["customer_email"] = sub["customer_email"]
+        review_rows.append(row)
 
     for i in range(0, len(review_rows), 500):
         db.table("reviews").insert(review_rows[i:i+500]).execute()
 
     try:
-        existing = (
-            db.table("analysis_versions")
-            .select("version")
-            .eq("business_id", business_id)
-            .order("version", desc=True)
-            .limit(1)
-            .execute()
-            .data
+        from services.business_linkage import create_analysis_version
+        create_analysis_version(
+            db,
+            business_id,
+            session_id,
+            label="Form Submissions",
         )
-        next_version = (existing[0]["version"] + 1) if existing else 1
-        db.table("analysis_versions").insert({
-            "business_id": business_id,
-            "session_id":  session_id,
-            "version":     next_version,
-            "label":       f"Version {next_version} (Form Submissions)",
-            "status":      "pending",
-        }).execute()
     except Exception:
         pass
 

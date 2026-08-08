@@ -1,16 +1,59 @@
 """
 Step 5 — Priority Engine (Decision Intelligence Engine)
 Calculates deterministic priority score for every issue cluster.
-Pure backend formula — zero AI.
+Pure backend formula — zero AI. Gemini NEVER sets this score.
 
-Formula:
-Priority = Revenue×0.35 + Frequency×0.30 + Severity×0.20 + CustomerTier×0.15
+Formula (components normalized 0–100):
+Priority =
+  Revenue Impact × 0.35
++ Customer Reach × 0.30
++ Severity × 0.20
++ Customer Tier × 0.15
+
+Revenue impact (estimated, not actual lost):
+  affected × ARPU × severity_risk_factor
+
+Stores individual components so the UI can show the calculation.
+Negative sentiment alone does NOT auto-rank an issue highest.
 """
 from database import get_db
-from config import (
-    WEIGHT_REVENUE, WEIGHT_FREQUENCY, WEIGHT_SEVERITY,
-    WEIGHT_TIER, AVG_REVENUE_PER_USER,
+from services.revenue_impact import (
+    load_business_assumptions,
+    score_clusters,
+    score_issue,
+    unique_affected_for_cluster,
 )
+
+
+# Re-export for tests / dashboard fallback that import score_cluster from here
+def score_cluster(
+    review_count: int,
+    premium_user_count: int,
+    avg_severity: float,
+    total_reviews: int,
+    total_premium: int,
+    *,
+    monthly_customers: int | None = None,
+    avg_revenue_per_user: float | None = None,
+    business_premium_pct: float | None = None,
+    max_revenue_impact: float | None = None,
+    affected_customers: int | None = None,
+) -> dict:
+    """
+    Shared scoring used by the pipeline and dashboard fallback.
+    Returns priority_score on a 0–100 scale.
+    """
+    return score_issue(
+        affected_customers=affected_customers if affected_customers is not None else review_count,
+        avg_severity=avg_severity,
+        premium_user_count=premium_user_count,
+        monthly_customers=monthly_customers,
+        avg_revenue_per_user=avg_revenue_per_user,
+        business_premium_pct=business_premium_pct,
+        max_revenue_impact=max_revenue_impact,
+        total_reviews=total_reviews,
+        total_premium=total_premium,
+    )
 
 
 def run(session_id: str) -> dict:
@@ -28,47 +71,44 @@ def run(session_id: str) -> dict:
     if not clusters_list:
         return {"ranked": 0}
 
-    total_reviews = sum(int(c.get("review_count") or 0) for c in clusters_list)
-    total_premium = sum(int(c.get("premium_user_count") or 0) for c in clusters_list)
+    assumptions = load_business_assumptions(db, session_id)
 
-    scored = []
+    # Deduplicate observed customers per cluster when possible
+    enriched = []
     for c in clusters_list:
-        rev_cnt = int(c.get("review_count") or 0)
-        prem_cnt = int(c.get("premium_user_count") or 0)
-        avg_sev = float(c.get("avg_severity") or 5)
+        affected = unique_affected_for_cluster(
+            db,
+            session_id,
+            str(c.get("issue_key") or ""),
+            int(c.get("review_count") or 0),
+        )
+        enriched.append({**c, "affected_customers": affected})
 
-        freq_norm     = rev_cnt / max(total_reviews, 1)
-        severity_norm = avg_sev / 10.0
-        premium_ratio = prem_cnt / max(rev_cnt, 1)
-        tier_norm     = 0.2 + (0.8 * premium_ratio)
+    scored = score_clusters(
+        enriched,
+        monthly_customers=assumptions.get("monthly_customers"),
+        avg_revenue_per_user=assumptions.get("avg_revenue_per_user"),
+        business_premium_pct=(
+            float(assumptions["premium_pct"])
+            if assumptions.get("premium_pct") is not None
+            else None
+        ),
+    )
 
-        if total_premium > 0:
-            revenue_norm = prem_cnt / max(total_premium, 1)
-        else:
-            revenue_norm = severity_norm
-
-        rev_part  = revenue_norm  * WEIGHT_REVENUE
-        reach_part = freq_norm     * WEIGHT_FREQUENCY
-        sev_part   = severity_norm * WEIGHT_SEVERITY
-        tier_part  = tier_norm     * WEIGHT_TIER
-
-        score = rev_part + reach_part + sev_part + tier_part
-        revenue_at_risk = prem_cnt * AVG_REVENUE_PER_USER
-
-        scored.append({
-            "id":             c.get("id"),
-            "issue_key":      c.get("issue_key"),
-            "priority_score": round(score, 4),
-            "revenue_at_risk": round(revenue_at_risk, 2),
-        })
-
-    # Sort descending by score and assign rank
-    scored.sort(key=lambda x: x["priority_score"], reverse=True)
-    for rank, item in enumerate(scored, start=1):
-        db.table("issue_clusters").update({
+    for item in scored:
+        update_row = {
             "priority_score": item["priority_score"],
-            "priority_rank":  rank,
+            "priority_rank": item["priority_rank"],
             "revenue_at_risk": item["revenue_at_risk"],
-        }).eq("id", item["id"]).execute()
+            "decision_pillars": item["decision_pillars"],
+        }
+        try:
+            db.table("issue_clusters").update(update_row).eq("id", item["id"]).execute()
+        except Exception:
+            db.table("issue_clusters").update({
+                "priority_score": item["priority_score"],
+                "priority_rank": item["priority_rank"],
+                "revenue_at_risk": item["revenue_at_risk"],
+            }).eq("id", item["id"]).execute()
 
     return {"ranked": len(scored)}

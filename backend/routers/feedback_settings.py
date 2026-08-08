@@ -10,10 +10,11 @@ Architecture:
   Business owner can override the default mode at any time.
 """
 from typing import Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, Header
 from pydantic import BaseModel, Field, model_validator
 from database import get_db
 from core.logging import get_logger
+from core.ownership import assert_business_owner
 
 logger = get_logger("routers.feedback_settings")
 router = APIRouter(prefix="/business", tags=["Feedback Settings"])
@@ -73,60 +74,80 @@ INDUSTRY_CONFIG_MAP = {
     "Hospital": {
         "feedback_mode":           "improvement",
         "reward_enabled":          False,
-        "points_per_feedback":     0,
+        "points_per_feedback":     10,  # dormant; rewards off — must satisfy DB CHECK (>=1)
         "cooldown_hours":          0,
         "minimum_feedback_length": 20,
-        "reward_threshold":        0,
+        "reward_threshold":        100,
         "reward_description":      "",
         "feedback_message":        "Your feedback helps us improve patient care.",
     },
     "University": {
         "feedback_mode":           "improvement",
         "reward_enabled":          False,
-        "points_per_feedback":     0,
+        "points_per_feedback":     10,
         "cooldown_hours":          0,
         "minimum_feedback_length": 20,
-        "reward_threshold":        0,
+        "reward_threshold":        100,
         "reward_description":      "",
         "feedback_message":        "Help us improve your campus experience.",
+    },
+    "Institute": {
+        "feedback_mode":           "improvement",
+        "reward_enabled":          False,
+        "points_per_feedback":     10,
+        "cooldown_hours":          0,
+        "minimum_feedback_length": 20,
+        "reward_threshold":        100,
+        "reward_description":      "",
+        "feedback_message":        "Help us improve your learning experience.",
     },
     "School": {
         "feedback_mode":           "improvement",
         "reward_enabled":          False,
-        "points_per_feedback":     0,
+        "points_per_feedback":     10,
         "cooldown_hours":          0,
         "minimum_feedback_length": 15,
-        "reward_threshold":        0,
+        "reward_threshold":        100,
         "reward_description":      "",
         "feedback_message":        "Help us improve the learning environment.",
+    },
+    "Shop": {
+        "feedback_mode":           "reward",
+        "reward_enabled":          True,
+        "points_per_feedback":     10,
+        "cooldown_hours":          168,
+        "minimum_feedback_length": 10,
+        "reward_threshold":        100,
+        "reward_description":      "Earn points toward your next purchase.",
+        "feedback_message":        "Earn points for sharing your shopping experience.",
     },
     "Bank": {
         "feedback_mode":           "improvement",
         "reward_enabled":          False,
-        "points_per_feedback":     0,
+        "points_per_feedback":     10,
         "cooldown_hours":          0,
         "minimum_feedback_length": 20,
-        "reward_threshold":        0,
+        "reward_threshold":        100,
         "reward_description":      "",
         "feedback_message":        "Your feedback helps us improve banking services.",
     },
     "SaaS": {
         "feedback_mode":           "product",
         "reward_enabled":          False,
-        "points_per_feedback":     0,
+        "points_per_feedback":     10,
         "cooldown_hours":          24,
         "minimum_feedback_length": 15,
-        "reward_threshold":        0,
+        "reward_threshold":        100,
         "reward_description":      "",
         "feedback_message":        "Your feedback helps shape future product improvements.",
     },
     "Mobile App": {
         "feedback_mode":           "product",
         "reward_enabled":          False,
-        "points_per_feedback":     0,
+        "points_per_feedback":     10,
         "cooldown_hours":          24,
         "minimum_feedback_length": 10,
-        "reward_threshold":        0,
+        "reward_threshold":        100,
         "reward_description":      "",
         "feedback_message":        "Help us improve the app.",
     },
@@ -165,20 +186,20 @@ def _build_defaults(industry: str) -> dict:
         return {
             "feedback_mode":           "improvement",
             "reward_enabled":          False,
-            "points_per_feedback":     0,
+            "points_per_feedback":     10,
             "cooldown_hours":          0,
             "minimum_feedback_length": 20,
-            "reward_threshold":        0,
+            "reward_threshold":        100,
             "reward_description":      "",
             "feedback_message":        "Your feedback helps us improve service quality.",
         }
     return {
         "feedback_mode":           "product",
         "reward_enabled":          False,
-        "points_per_feedback":     0,
+        "points_per_feedback":     10,
         "cooldown_hours":          24,
         "minimum_feedback_length": 15,
-        "reward_threshold":        0,
+        "reward_threshold":        100,
         "reward_description":      "",
         "feedback_message":        "Your feedback helps shape future product improvements.",
     }
@@ -293,19 +314,35 @@ def _get_or_create_settings(db, business_id: str, industry: str) -> dict:
     if existing:
         return existing[0]
 
-    # Auto-create with defaults
+    # Auto-create with defaults (clamp numeric fields to DB CHECK constraints)
     defaults = _build_defaults(industry)
+    defaults["points_per_feedback"] = max(1, int(defaults.get("points_per_feedback") or 10))
+    defaults["reward_threshold"] = max(1, int(defaults.get("reward_threshold") or 100))
+    defaults["cooldown_hours"] = max(0, int(defaults.get("cooldown_hours") or 0))
     import uuid as _uuid
     new_row = {
         "id":          str(_uuid.uuid4()),
         "business_id": business_id,
         **defaults,
     }
-    result = (
-        db.table("feedback_engagement_settings")
-        .insert(new_row)
-        .execute()
-    )
+    try:
+        result = (
+            db.table("feedback_engagement_settings")
+            .insert(new_row)
+            .execute()
+        )
+    except Exception as e:
+        # #region agent log
+        try:
+            import json, time
+            from pathlib import Path
+            _p = Path(__file__).resolve().parents[2] / "debug-74d1c8.log"
+            with open(_p, "a", encoding="utf-8") as _f:
+                _f.write(json.dumps({"sessionId":"74d1c8","hypothesisId":"D","location":"feedback_settings.py:_get_or_create_settings","message":"settings insert failed","data":{"business_id":business_id,"industry":industry,"error":str(e)[:250],"points":defaults.get("points_per_feedback"),"threshold":defaults.get("reward_threshold")},"timestamp":int(time.time()*1000),"runId":"post-fix"})+"\n")
+        except Exception:
+            pass
+        # #endregion
+        raise
     if result.data:
         return result.data[0]
     return new_row
@@ -331,26 +368,22 @@ def _row_to_response(row: dict) -> FeedbackEngagementSettings:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/{business_id}/feedback-settings", response_model=FeedbackEngagementSettings)
-async def get_feedback_settings(business_id: str):
+async def get_feedback_settings(
+    business_id: str,
+    request: Request,
+    x_owner_token: Optional[str] = Header(None),
+):
     """
     Returns the feedback engagement settings for a business.
     If no settings exist yet, auto-creates them using industry defaults.
     This means the first visit to Settings page always works.
     """
     db = get_db()
-
-    # Validate business exists and get industry
-    biz = (
-        db.table("businesses")
-        .select("id,industry")
-        .eq("id", business_id)
-        .execute()
-        .data
+    owner_biz = assert_business_owner(
+        business_id, request=request, x_owner_token=x_owner_token, db=db
     )
-    if not biz:
-        raise HTTPException(status_code=404, detail="Business not found.")
 
-    industry = biz[0]["industry"]
+    industry = owner_biz.get("industry") or "Mobile App"
     row = _get_or_create_settings(db, business_id, industry)
 
     logger.info(f"Fetched feedback settings: business={business_id} mode={row.get('feedback_mode')}")
@@ -358,7 +391,12 @@ async def get_feedback_settings(business_id: str):
 
 
 @router.patch("/{business_id}/feedback-settings", response_model=FeedbackEngagementSettings)
-async def update_feedback_settings(business_id: str, body: FeedbackSettingsUpdate):
+async def update_feedback_settings(
+    business_id: str,
+    body: FeedbackSettingsUpdate,
+    request: Request,
+    x_owner_token: Optional[str] = Header(None),
+):
     """
     Partially update feedback engagement settings.
     Only fields included in the request body are updated.
@@ -368,19 +406,11 @@ async def update_feedback_settings(business_id: str, body: FeedbackSettingsUpdat
     Validation ensures reward-specific fields are sane.
     """
     db = get_db()
-
-    # Validate business exists
-    biz = (
-        db.table("businesses")
-        .select("id,industry")
-        .eq("id", business_id)
-        .execute()
-        .data
+    owner_biz = assert_business_owner(
+        business_id, request=request, x_owner_token=x_owner_token, db=db
     )
-    if not biz:
-        raise HTTPException(status_code=404, detail="Business not found.")
 
-    industry = biz[0]["industry"]
+    industry = owner_biz.get("industry") or "Mobile App"
 
     # Ensure settings row exists (auto-create if first time)
     _get_or_create_settings(db, business_id, industry)

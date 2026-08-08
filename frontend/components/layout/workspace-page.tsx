@@ -16,7 +16,7 @@ export function WorkspacePage({
     width === "narrow"
       ? "max-w-3xl"
       : width === "wide"
-        ? "max-w-6xl"
+        ? "max-w-[1400px]"
         : "max-w-5xl";
 
   return (

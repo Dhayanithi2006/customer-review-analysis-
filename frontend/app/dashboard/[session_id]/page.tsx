@@ -13,14 +13,15 @@ import { WorkspacePage } from "@/components/layout/workspace-page";
 
 // ── Severity bar
 function SeverityBar({ value }: { value: number }) {
-  const pct = Math.round((value / 10) * 100);
-  const color = value >= 8 ? "bg-red-500" : value >= 5 ? "bg-amber-500" : "bg-emerald-500";
+  // Phase 3 severity scale: 1–5
+  const pct = Math.round((value / 5) * 100);
+  const color = value >= 4 ? "bg-red-500" : value >= 3 ? "bg-amber-500" : "bg-emerald-500";
   return (
     <div className="flex items-center gap-2 w-full">
       <div className="flex-1 h-1.5 rounded-full bg-white/6 overflow-hidden">
         <div className={`h-full rounded-full ${color} transition-all duration-500`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs font-mono font-bold text-slate-400 shrink-0">{value.toFixed(1)}/10</span>
+      <span className="text-xs font-mono font-bold text-slate-400 shrink-0">{value.toFixed(1)}/5</span>
     </div>
   );
 }
@@ -47,6 +48,12 @@ function CategoryBadge({ category }: { category: string }) {
     Onboarding: "bg-emerald-500/12 text-emerald-400 border-emerald-500/25",
     "Customer Support": "bg-purple-500/12 text-purple-400 border-purple-500/25",
     Praise: "bg-green-500/12 text-green-400 border-green-500/25",
+    Payment: "bg-rose-500/12 text-rose-400 border-rose-500/25",
+    payment: "bg-rose-500/12 text-rose-400 border-rose-500/25",
+    Service: "bg-violet-500/12 text-violet-400 border-violet-500/25",
+    service: "bg-violet-500/12 text-violet-400 border-violet-500/25",
+    Other: "bg-slate-500/12 text-slate-400 border-slate-500/25",
+    other: "bg-slate-500/12 text-slate-400 border-slate-500/25",
   };
   return (
     <span className={`inline-flex px-2 py-0.5 rounded-md border text-[10px] font-bold uppercase tracking-wide ${colors[category] || "bg-slate-500/12 text-slate-400 border-slate-500/25"}`}>
@@ -57,12 +64,15 @@ function CategoryBadge({ category }: { category: string }) {
 
 // ── Full issue card — every field that supports the decision
 function IssueCard({ cluster, sessionId, rank }: { cluster: IssueCluster; sessionId: string; rank: number }) {
-  const score = Math.round(cluster.priority_score * 100);
-  const isCritical = cluster.avg_severity >= 8;
+  const score = (() => {
+    const raw = cluster.priority_score || 0;
+    return Math.round(raw <= 1.5 ? raw * 100 : raw);
+  })();
+  const isCritical = cluster.avg_severity >= 4;
   const revenueK = cluster.revenue_at_risk > 0 ? `₹${(cluster.revenue_at_risk / 1000).toFixed(1)}K` : "—";
-  const recommendation = cluster.avg_severity >= 8
+  const recommendation = cluster.avg_severity >= 4
     ? "Ship in next sprint"
-    : cluster.avg_severity >= 5
+    : cluster.avg_severity >= 3
     ? "Plan for next quarter"
     : "Add to backlog";
 
@@ -107,7 +117,7 @@ function IssueCard({ cluster, sessionId, rank }: { cluster: IssueCluster; sessio
           <p className="text-[10px] text-slate-600 uppercase tracking-wider font-bold mb-1.5">Severity</p>
           <SeverityBar value={cluster.avg_severity || 0} />
           <p className="text-[10px] text-slate-500 mt-1.5">
-            {(cluster.avg_severity || 0) >= 8 ? "Critical" : (cluster.avg_severity || 0) >= 5 ? "High" : "Medium"}
+            {(cluster.avg_severity || 0) >= 4 ? "Critical" : (cluster.avg_severity || 0) >= 3 ? "High" : "Medium"}
           </p>
         </div>
         {/* Revenue Impact */}
@@ -209,9 +219,9 @@ function PriorityMatrix({ issues }: { issues: IssueCluster[] }) {
         {top8.map((issue) => {
           const maxFreq = Math.max(...top8.map(i => i.review_count), 1);
           const x = Math.min(95, Math.max(2, (issue.review_count / maxFreq) * 95));
-          const y = Math.min(95, Math.max(2, ((10 - (issue.avg_severity || 5)) / 10) * 90));
+          const y = Math.min(95, Math.max(2, ((5 - (issue.avg_severity || 3)) / 5) * 90));
           const size = issue.priority_rank === 1 ? "w-5 h-5" : "w-3.5 h-3.5";
-          const color = (issue.avg_severity || 0) >= 8 ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]" : (issue.avg_severity || 0) >= 5 ? "bg-amber-500" : "bg-primary";
+          const color = (issue.avg_severity || 0) >= 4 ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]" : (issue.avg_severity || 0) >= 3 ? "bg-amber-500" : "bg-primary";
           return (
             <div
               key={issue.id}
@@ -280,7 +290,7 @@ export default function DashboardPage() {
 
   const topIssue = data?.issues?.[0];
   const totalRevRisk = data?.revenue_at_risk || 0;
-  const criticalCount = data?.issues?.filter(i => (i.avg_severity || 0) >= 8).length || 0;
+  const criticalCount = data?.issues?.filter(i => (i.avg_severity || 0) >= 4).length || 0;
   const premiumAffected = data?.issues?.reduce((s, i) => s + (i.premium_user_count || 0), 0) || 0;
 
   return (
@@ -572,7 +582,7 @@ export default function DashboardPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right hidden lg:table-cell">
-                          <span className={`text-xs font-mono ${(issue.avg_severity || 0) >= 8 ? "text-red-400" : (issue.avg_severity || 0) >= 5 ? "text-amber-400" : "text-slate-400"}`}>
+                          <span className={`text-xs font-mono ${(issue.avg_severity || 0) >= 4 ? "text-red-400" : (issue.avg_severity || 0) >= 3 ? "text-amber-400" : "text-slate-400"}`}>
                             {(issue.avg_severity || 0).toFixed(1)}
                           </span>
                         </td>
