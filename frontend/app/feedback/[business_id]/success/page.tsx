@@ -38,15 +38,19 @@ function SuccessContent() {
   const businessName = searchParams.get("biz") || "the business";
   const customMsg    = searchParams.get("msg");
   const pts          = parseInt(searchParams.get("pts") || "0");
+  const bal          = parseInt(searchParams.get("bal") || "0");
+  const eligible     = searchParams.get("eligible") !== "false";
 
   const mode    = (rawMode in MODE_DEFAULTS ? rawMode : "improvement") as Mode;
   const config  = MODE_DEFAULTS[mode];
 
-  // Formulate dynamic message matching Phase 2 specifications
+  // Formulate dynamic message matching Phase 2 & Phase 3 specifications
   let displayMessage = customMsg;
   if (!displayMessage) {
     if (mode === "reward") {
-      displayMessage = `You've earned ${pts > 0 ? pts : 10} points. Your feedback helps us improve your experience.`;
+      displayMessage = pts > 0
+        ? `You've earned ${pts} points. Your feedback helps us improve your experience.`
+        : "Thank you for your feedback! Your submission has been received.";
     } else if (mode === "improvement") {
       displayMessage = "Your feedback helps us improve patient care and service quality.";
     } else {
@@ -99,10 +103,19 @@ function SuccessContent() {
 
           <h1 className="text-2xl font-black text-slate-100 mb-3">{config.title}</h1>
 
-          {/* Points Highlight (REWARD MODE ONLY) */}
-          {mode === "reward" && pts > 0 && (
-            <div className="my-3 py-2 px-4 rounded-xl bg-amber-500/10 border border-amber-500/20 inline-block">
-              <p className="text-lg font-black text-amber-400">+{pts} Loyalty Points Earned!</p>
+          {/* Points Highlight & Balance Ledger Display (REWARD MODE ONLY) */}
+          {mode === "reward" && (
+            <div className="my-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-center space-y-1">
+              {pts > 0 ? (
+                <p className="text-lg font-black text-amber-400">+{pts} Points Earned!</p>
+              ) : (
+                <p className="text-xs font-semibold text-amber-300/80">Feedback Received (Reward Cooldown Active)</p>
+              )}
+              {bal > 0 && (
+                <p className="text-xs text-amber-200/90 font-mono">
+                  Total Balance: <strong>{bal} Points</strong>
+                </p>
+              )}
             </div>
           )}
 

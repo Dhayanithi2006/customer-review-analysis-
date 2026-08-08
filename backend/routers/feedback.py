@@ -39,6 +39,7 @@ class FeedbackSubmitRequest(BaseModel):
     customer_name: Optional[str] = Field(default=None, max_length=80)
     customer_email: Optional[str] = Field(default=None, max_length=200)
     feedback_tag: Optional[str] = Field(default=None, description="Bug | Feature Request | Performance | UX | Praise | Other")
+    user_token: Optional[str] = Field(default=None, description="Anonymous customer UUID token")
 
     model_config = {
         "json_schema_extra": {
@@ -185,8 +186,11 @@ async def submit_feedback(business_id: str, body: FeedbackSubmitRequest):
     2. Check minimum length validation according to business settings
     3. Spam-check the text
     4. Store in feedback_submissions buffer table
-    5. Return mode-specific engagement success response
+    5. Evaluate & record reward in feedback_rewards ledger
+    6. Return mode-specific engagement success response with points balance & cooldown status
     """
+    from routers.reward import calculate_user_balance, check_cooldown_status
+
     db = get_db()
 
     biz = (
@@ -210,6 +214,12 @@ async def submit_feedback(business_id: str, body: FeedbackSubmitRequest):
 
     mode = copy["mode"]
     min_length = int(settings.get("minimum_feedback_length", 10))
+    reward_enabled = bool(settings.get("reward_enabled", False))
+    points_per_feedback = int(settings.get("points_per_feedback", 10))
+    cooldown_hours = int(settings.get("cooldown_hours", 168))
+
+    # Anonymous user token handling
+    user_token = body.user_token.strip() if body.user_token else str(uuid.uuid4())
 
     # ── Minimum length validation ─────────────────────────────────────────────
     text = body.text.strip()
@@ -219,14 +229,23 @@ async def submit_feedback(business_id: str, body: FeedbackSubmitRequest):
             detail=f"Feedback is too short. Please enter at least {min_length} characters."
         )
 
+    if copy["requires_rating"] and body.rating is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Rating is required for this feedback."
+        )
+
     # ── Spam detection ────────────────────────────────────────────────────────
     if is_spam(text):
         # Return 200 (silent reject) to prevent bot reverse engineering
         return {
             "success": True,
             "message": copy["success"],
+            "user_token": user_token,
             "engagement_mode": mode,
-            "points_earned": settings.get("points_per_feedback", 10) if mode == "reward" and settings.get("reward_enabled") else 0,
+            "points_earned": 0,
+            "current_balance": calculate_user_balance(db, business_id, user_token),
+            "reward_eligible": False,
             "submission_id": None,
         }
 
@@ -265,15 +284,54 @@ async def submit_feedback(business_id: str, body: FeedbackSubmitRequest):
         logger.error(f"Failed to store feedback submission: {e}")
         raise HTTPException(status_code=500, detail="Failed to record feedback. Please try again.")
 
-    points = int(settings.get("points_per_feedback", 10)) if mode == "reward" and settings.get("reward_enabled") else 0
+    # ── Reward Ledger Evaluation ──────────────────────────────────────────────
+    points_earned = 0
+    reward_eligible = False
+    reward_status = "ineligible"
+    next_reward_at = None
+
+    if mode == "reward" and reward_enabled:
+        # Check cooldown
+        in_cooldown, next_eligible_at = check_cooldown_status(
+            db, business_id, user_token, cooldown_hours
+        )
+
+        if in_cooldown and next_eligible_at:
+            reward_status = "cooldown_skipped"
+            points_earned = 0
+            reward_eligible = False
+            next_reward_at = next_eligible_at.isoformat()
+        else:
+            reward_status = "awarded"
+            points_earned = points_per_feedback
+            reward_eligible = True
+
+    # Record in feedback_rewards ledger
+    try:
+        db.table("feedback_rewards").insert({
+            "id":                     str(uuid.uuid4()),
+            "business_id":            business_id,
+            "feedback_id":            submission_id,
+            "user_token":             user_token,
+            "points_awarded":         points_earned,
+            "reward_status":          reward_status,
+        }).execute()
+    except Exception as e:
+        logger.warning(f"Failed to write to feedback_rewards ledger: {e}")
+
+    current_balance = calculate_user_balance(db, business_id, user_token)
 
     return {
         "success":         True,
+        "user_token":      user_token,
         "message":         copy["success"],
         "engagement_mode": mode,
         "submission_id":   submission_id,
-        "points_earned":   points,
-        "show_reward":     mode == "reward" and bool(settings.get("reward_enabled")),
+        "points_earned":   points_earned,
+        "current_balance": current_balance,
+        "reward_eligible": reward_eligible,
+        "next_reward_at":  next_reward_at,
+        "show_reward":     mode == "reward" and reward_enabled,
     }
 
 

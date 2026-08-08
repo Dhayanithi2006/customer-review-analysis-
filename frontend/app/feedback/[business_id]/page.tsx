@@ -109,7 +109,22 @@ export default function FeedbackFormPage() {
   const [selectedTag, setSelectedTag] = useState("");
   const [charCount, setCharCount] = useState(0);
 
+  const [userToken, setUserToken] = useState<string>("");
+
   useEffect(() => {
+    // Generate or retrieve anonymous user_token from localStorage
+    let token = "";
+    try {
+      token = localStorage.getItem("roadmapai_user_token") || "";
+      if (!token) {
+        token = "usr-anon-" + crypto.randomUUID();
+        localStorage.setItem("roadmapai_user_token", token);
+      }
+    } catch {
+      token = "usr-anon-" + Math.random().toString(36).substring(2, 15);
+    }
+    setUserToken(token);
+
     fetch(`${API}/feedback/${businessId}`)
       .then(r => {
         if (r.status === 404) { setNotFound(true); return null; }
@@ -141,6 +156,7 @@ export default function FeedbackFormPage() {
           customer_name: name.trim() || undefined,
           customer_email: email.trim() || undefined,
           feedback_tag: selectedTag || undefined,
+          user_token: userToken,
         }),
       });
 
@@ -151,7 +167,12 @@ export default function FeedbackFormPage() {
           biz: config.business_name,
           msg: resData.message || config.mode_success_message,
           pts: String(resData.points_earned || 0),
+          bal: String(resData.current_balance || 0),
+          eligible: String(resData.reward_eligible ?? true),
         });
+        if (resData.next_reward_at) {
+          queryParams.set("next", resData.next_reward_at);
+        }
         router.push(`/feedback/${businessId}/success?${queryParams.toString()}`);
       } else {
         alert(resData.detail || "Submission failed. Please try again.");
