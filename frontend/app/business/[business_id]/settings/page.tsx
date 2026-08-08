@@ -2,8 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { getBusiness, updateWorkspaceSettings } from "@/lib/business-api";
-import type { BusinessResponse } from "@/lib/business-api";
+import {
+  getBusiness,
+  updateWorkspaceSettings,
+  getFeedbackSettings,
+  updateFeedbackSettings,
+} from "@/lib/business-api";
+import type { BusinessResponse, FeedbackEngagementSettings } from "@/lib/business-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,25 +28,55 @@ export default function WorkspaceSettingsPage() {
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
+  // Revenue settings state
   const [monthlyCustomers, setMonthlyCustomers] = useState("500");
   const [avgRevenue, setAvgRevenue] = useState("500");
   const [premiumPct, setPremiumPct] = useState("20");
   const [currency, setCurrency] = useState("INR");
 
+  // Feedback Engagement Settings state
+  const [feedbackSettings, setFeedbackSettings] = useState<FeedbackEngagementSettings | null>(null);
+  const [savingFeedbackSettings, setSavingFeedbackSettings] = useState(false);
+  const [feedbackSettingsSaved, setFeedbackSettingsSaved] = useState(false);
+
+  const [feedbackMode, setFeedbackMode] = useState<"reward" | "improvement" | "product">("product");
+  const [rewardEnabled, setRewardEnabled] = useState(false);
+  const [pointsPerFeedback, setPointsPerFeedback] = useState("10");
+  const [cooldownHours, setCooldownHours] = useState("168");
+  const [minimumFeedbackLength, setMinimumFeedbackLength] = useState("10");
+  const [rewardThreshold, setRewardThreshold] = useState("100");
+  const [rewardDescription, setRewardDescription] = useState("");
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+
   useEffect(() => {
-    getBusiness(businessId)
-      .then((b) => {
+    Promise.all([
+      getBusiness(businessId),
+      getFeedbackSettings(businessId).catch(() => null),
+    ])
+      .then(([b, fs]) => {
         setBiz(b);
         setMonthlyCustomers(String(b.monthly_customers));
         setAvgRevenue(String(b.avg_revenue_per_user));
         setPremiumPct(String(b.premium_pct));
         setCurrency(b.currency);
+
+        if (fs) {
+          setFeedbackSettings(fs);
+          setFeedbackMode(fs.feedback_mode);
+          setRewardEnabled(fs.reward_enabled);
+          setPointsPerFeedback(String(fs.points_per_feedback));
+          setCooldownHours(String(fs.cooldown_hours));
+          setMinimumFeedbackLength(String(fs.minimum_feedback_length));
+          setRewardThreshold(String(fs.reward_threshold));
+          setRewardDescription(fs.reward_description || "");
+          setFeedbackMessage(fs.feedback_message || "");
+        }
       })
       .catch(() => null)
       .finally(() => setLoading(false));
   }, [businessId]);
 
-  const handleSave = async () => {
+  const handleSaveRevenue = async () => {
     setSaving(true);
     try {
       const updated = await updateWorkspaceSettings(businessId, {
@@ -57,6 +92,29 @@ export default function WorkspaceSettingsPage() {
       /* toast handled by api */
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveFeedbackSettings = async () => {
+    setSavingFeedbackSettings(true);
+    try {
+      const updated = await updateFeedbackSettings(businessId, {
+        feedback_mode: feedbackMode,
+        reward_enabled: rewardEnabled,
+        points_per_feedback: parseInt(pointsPerFeedback) || 10,
+        cooldown_hours: parseInt(cooldownHours) || 0,
+        minimum_feedback_length: parseInt(minimumFeedbackLength) || 10,
+        reward_threshold: parseInt(rewardThreshold) || 100,
+        reward_description: rewardDescription,
+        feedback_message: feedbackMessage,
+      });
+      setFeedbackSettings(updated);
+      setFeedbackSettingsSaved(true);
+      setTimeout(() => setFeedbackSettingsSaved(false), 3000);
+    } catch {
+      /* toast handled by api */
+    } finally {
+      setSavingFeedbackSettings(false);
     }
   };
 
@@ -98,9 +156,10 @@ export default function WorkspaceSettingsPage() {
       <PageIntro
         eyebrow="Settings"
         title="Workspace settings"
-        description="Revenue assumptions power Decision Center impact scoring. Update them anytime."
+        description="Configure feedback engagement modes, reward rules, and revenue impact parameters."
       />
 
+      {/* Business Identity */}
       <section className="rounded-[20px] border border-border bg-surface p-5 md:p-6 mb-5 card-elevated">
         <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500 mb-4">
           Business identity
@@ -122,40 +181,160 @@ export default function WorkspaceSettingsPage() {
         </div>
       </section>
 
-      {/* Feedback Engagement Mode */}
-      {(() => {
-        const mode = (biz.engagement_mode || "product") as string;
-        const modeConfig: Record<string, { icon: string; title: string; desc: string; border: string; bg: string }> = {
-          reward:      { icon: "🎁", title: "Reward Mode",      desc: "Customers earn loyalty points for submitting feedback. Best for transactional businesses.",              border: "border-amber-500/25",  bg: "bg-amber-500/8" },
-          improvement: { icon: "💬", title: "Improvement Mode", desc: "Feedback framed as helping improve the service. Professional tone — no gamification.",                    border: "border-cyan-500/25",   bg: "bg-cyan-500/8"  },
-          product:     { icon: "🚀", title: "Product Mode",     desc: "Feedback influences the product roadmap. Includes category tags: Bug, Feature Request, Performance.", border: "border-indigo-500/25", bg: "bg-indigo-500/8" },
-        };
-        const cfg = modeConfig[mode] || modeConfig["product"];
-        return (
-          <section className="rounded-[20px] border border-border bg-surface p-5 md:p-6 mb-5 card-elevated">
-            <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500 mb-4">Feedback Engagement Mode</h2>
-            <div className={`flex items-start gap-3 p-4 rounded-2xl border ${cfg.border} ${cfg.bg}`}>
-              <span className="text-2xl shrink-0">{cfg.icon}</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-slate-100 mb-1">{cfg.title}</p>
-                <p className="text-xs text-slate-400 leading-relaxed mb-3">{cfg.desc}</p>
-                <div className="flex gap-2 flex-wrap">
-                  <a href={biz.feedback_url} target="_blank" rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/10 text-slate-300 text-xs font-semibold hover:border-white/25 transition-colors no-underline">
-                    🔗 Preview Form
-                  </a>
-                  <button onClick={() => copyValue("feedback_url", biz.feedback_url)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/10 text-slate-400 text-xs font-semibold hover:border-white/25 transition-colors">
-                    {copied === "feedback_url" ? "✓ Copied" : "📋 Copy URL"}
+      {/* Feedback Engagement Settings Editor */}
+      <section className="rounded-[20px] border border-border bg-surface p-5 md:p-6 mb-5 card-elevated">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">
+            Feedback Engagement Settings
+          </h2>
+          <span className="text-[10px] text-slate-500 font-mono">
+            Default: {biz.industry}
+          </span>
+        </div>
+        <p className="text-xs text-slate-400 mb-5 leading-relaxed">
+          Customize how feedback is collected from your customers. Industry defaults are pre-applied, but you can override any setting below.
+        </p>
+
+        <div className="space-y-5">
+          {/* Mode Selector */}
+          <div>
+            <Label htmlFor="feedback-mode">Feedback Mode</Label>
+            <div className="grid grid-cols-3 gap-2 mt-1.5">
+              {[
+                { value: "reward", icon: "🎁", label: "Reward Mode", desc: "Points & Incentives" },
+                { value: "improvement", icon: "💬", label: "Improvement Mode", desc: "Trust & Quality" },
+                { value: "product", icon: "🚀", label: "Product Mode", desc: "Roadmap & Features" },
+              ].map((m) => {
+                const active = feedbackMode === m.value;
+                return (
+                  <button
+                    key={m.value}
+                    type="button"
+                    onClick={() => {
+                      setFeedbackMode(m.value as any);
+                      if (m.value === "reward") setRewardEnabled(true);
+                    }}
+                    className={`p-3 rounded-2xl border text-left transition-all ${
+                      active
+                        ? "border-primary bg-primary/10 text-white"
+                        : "border-white/10 bg-surface-2 text-slate-400 hover:border-white/20"
+                    }`}
+                  >
+                    <span className="text-xl block mb-1">{m.icon}</span>
+                    <p className="text-xs font-bold text-slate-200">{m.label}</p>
+                    <p className="text-[10px] text-slate-500">{m.desc}</p>
                   </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Feedback Message */}
+          <div>
+            <Label htmlFor="feedback-message">Feedback Form Headline / Message</Label>
+            <Input
+              id="feedback-message"
+              type="text"
+              value={feedbackMessage}
+              onChange={(e) => setFeedbackMessage(e.target.value)}
+              placeholder="e.g. Help us serve you better"
+            />
+          </div>
+
+          {/* Core Configuration Parameters */}
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="min-length">Minimum Feedback Length (chars)</Label>
+              <Input
+                id="min-length"
+                type="number"
+                value={minimumFeedbackLength}
+                onChange={(e) => setMinimumFeedbackLength(e.target.value)}
+                min={5}
+                max={500}
+              />
+            </div>
+            <div>
+              <Label htmlFor="cooldown-hours">Cooldown Between Submissions (hours)</Label>
+              <Input
+                id="cooldown-hours"
+                type="number"
+                value={cooldownHours}
+                onChange={(e) => setCooldownHours(e.target.value)}
+                min={0}
+                max={8760}
+              />
+            </div>
+          </div>
+
+          {/* Reward Settings Panel (Conditional or Togglable) */}
+          <div className="pt-3 border-t border-white/8 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="reward-toggle">Reward / Gamification Mechanics</Label>
+                <p className="text-[11px] text-slate-500">Enable points and rewards for customer feedback</p>
+              </div>
+              <input
+                id="reward-toggle"
+                type="checkbox"
+                checked={rewardEnabled}
+                onChange={(e) => setRewardEnabled(e.target.checked)}
+                className="w-5 h-5 accent-primary rounded cursor-pointer"
+              />
+            </div>
+
+            {rewardEnabled && (
+              <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/15 space-y-4">
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="points-per-feedback">Points Per Feedback</Label>
+                    <Input
+                      id="points-per-feedback"
+                      type="number"
+                      value={pointsPerFeedback}
+                      onChange={(e) => setPointsPerFeedback(e.target.value)}
+                      min={1}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="reward-threshold">Reward Threshold (Points)</Label>
+                    <Input
+                      id="reward-threshold"
+                      type="number"
+                      value={rewardThreshold}
+                      onChange={(e) => setRewardThreshold(e.target.value)}
+                      min={1}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="reward-description">Reward Description</Label>
+                  <Input
+                    id="reward-description"
+                    type="text"
+                    value={rewardDescription}
+                    onChange={(e) => setRewardDescription(e.target.value)}
+                    placeholder="e.g. Free coffee on your next visit"
+                  />
                 </div>
               </div>
-            </div>
-            <p className="text-[10px] text-slate-600 mt-3">Automatically determined by your industry: {biz.industry}</p>
-          </section>
-        );
-      })()}
+            )}
+          </div>
 
+          <div className="flex justify-end pt-2">
+            <Button
+              type="button"
+              onClick={handleSaveFeedbackSettings}
+              disabled={savingFeedbackSettings}
+            >
+              {savingFeedbackSettings ? "Saving Settings..." : feedbackSettingsSaved ? "Saved ✓" : "Save Engagement Settings"}
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* Revenue Settings */}
       <section className="rounded-[20px] border border-border bg-surface p-5 md:p-6 mb-5 card-elevated">
         <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500 mb-1">
           Revenue settings
@@ -224,9 +403,20 @@ export default function WorkspaceSettingsPage() {
               <span>100% paying</span>
             </div>
           </div>
+
+          <div className="flex justify-end pt-2">
+            <Button
+              type="button"
+              onClick={handleSaveRevenue}
+              disabled={saving}
+            >
+              {saving ? "Saving Revenue Settings..." : saved ? "Saved ✓" : "Save Revenue Settings"}
+            </Button>
+          </div>
         </div>
       </section>
 
+      {/* Workspace URLs */}
       <section className="rounded-[20px] border border-border bg-surface p-5 md:p-6 mb-6 card-elevated">
         <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500 mb-4">
           Workspace URLs
@@ -257,16 +447,6 @@ export default function WorkspaceSettingsPage() {
           ))}
         </div>
       </section>
-
-      <Button
-        onClick={handleSave}
-        disabled={saving}
-        size="lg"
-        className="w-full justify-center"
-        variant={saved ? "success" : "default"}
-      >
-        {saving ? "Saving…" : saved ? "Settings saved" : "Save settings"}
-      </Button>
     </WorkspacePage>
   );
 }

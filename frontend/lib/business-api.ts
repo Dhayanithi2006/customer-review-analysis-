@@ -167,3 +167,48 @@ export async function processSubmissions(businessId: string): Promise<{
   toast.success("Analysis started!", `Processing ${data.total_processed} form submissions.`);
   return data;
 }
+
+export interface FeedbackEngagementSettings {
+  id: string;
+  business_id: string;
+  feedback_mode: "reward" | "improvement" | "product";
+  reward_enabled: boolean;
+  points_per_feedback: number;
+  cooldown_hours: number;
+  minimum_feedback_length: number;
+  reward_threshold: number;
+  reward_description: string;
+  feedback_message: string;
+  mode_label?: string;
+  mode_icon?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getFeedbackSettings(businessId: string): Promise<FeedbackEngagementSettings> {
+  const res = await fetch(`${BASE_URL}/business/${businessId}/feedback-settings`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to load feedback settings" }));
+    throw new Error(err?.detail || "Failed to load feedback settings");
+  }
+  return res.json();
+}
+
+export async function updateFeedbackSettings(
+  businessId: string,
+  settings: Partial<Omit<FeedbackEngagementSettings, "id" | "business_id" | "created_at" | "updated_at">>
+): Promise<FeedbackEngagementSettings> {
+  const res = await fetch(`${BASE_URL}/business/${businessId}/feedback-settings`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to update feedback settings" }));
+    toast.error("Settings update failed", err?.detail || "Could not update feedback settings.");
+    throw new Error(err?.detail || "Failed to update feedback settings");
+  }
+  toast.success("Settings saved", "Feedback engagement settings updated successfully.");
+  return res.json();
+}
+
