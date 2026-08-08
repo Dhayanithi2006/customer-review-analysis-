@@ -18,52 +18,160 @@ from core.logging import get_logger
 logger = get_logger("routers.feedback_settings")
 router = APIRouter(prefix="/business", tags=["Feedback Settings"])
 
-# ── Industry → default settings mapping ──────────────────────────────────────
-# Transactional (high-volume, points incentive)
-REWARD_INDUSTRIES = {"Supermarket", "Hotel", "Restaurant", "E-commerce", "Hostel"}
-# Institutional (trust-based, no gamification)
-IMPROVEMENT_INDUSTRIES = {"Hospital", "School", "University", "Bank", "Clinic", "NGO"}
-# Product/digital (roadmap influence)
-PRODUCT_INDUSTRIES = {"Mobile App", "SaaS"}
+# ── Industry Configuration Map (Phase 8 — Generic & Configuration-Driven) ──────
+INDUSTRY_CONFIG_MAP = {
+    "Supermarket": {
+        "feedback_mode":           "reward",
+        "reward_enabled":          True,
+        "points_per_feedback":     10,
+        "cooldown_hours":          168,
+        "minimum_feedback_length": 10,
+        "reward_threshold":        100,
+        "reward_description":      "Earn points for valid feedback toward your next grocery visit.",
+        "feedback_message":        "Earn 10 points for valid feedback.",
+    },
+    "Hotel": {
+        "feedback_mode":           "reward",
+        "reward_enabled":          True,
+        "points_per_feedback":     50,
+        "cooldown_hours":          168,
+        "minimum_feedback_length": 15,
+        "reward_threshold":        250,
+        "reward_description":      "Earn loyalty points for your feedback toward your next stay.",
+        "feedback_message":        "Earn loyalty points for your feedback.",
+    },
+    "Restaurant": {
+        "feedback_mode":           "reward",
+        "reward_enabled":          True,
+        "points_per_feedback":     20,
+        "cooldown_hours":          168,
+        "minimum_feedback_length": 10,
+        "reward_threshold":        100,
+        "reward_description":      "Earn points toward your next meal or visit.",
+        "feedback_message":        "Earn points toward your next visit.",
+    },
+    "E-commerce": {
+        "feedback_mode":           "reward",
+        "reward_enabled":          True,
+        "points_per_feedback":     15,
+        "cooldown_hours":          168,
+        "minimum_feedback_length": 10,
+        "reward_threshold":        100,
+        "reward_description":      "Earn points toward your next online purchase.",
+        "feedback_message":        "Earn points toward your next purchase.",
+    },
+    "Hostel": {
+        "feedback_mode":           "reward",
+        "reward_enabled":          True,
+        "points_per_feedback":     10,
+        "cooldown_hours":          168,
+        "minimum_feedback_length": 10,
+        "reward_threshold":        100,
+        "reward_description":      "Earn points toward hostel perks.",
+        "feedback_message":        "Earn points for sharing your stay feedback.",
+    },
+    "Hospital": {
+        "feedback_mode":           "improvement",
+        "reward_enabled":          False,
+        "points_per_feedback":     0,
+        "cooldown_hours":          0,
+        "minimum_feedback_length": 20,
+        "reward_threshold":        0,
+        "reward_description":      "",
+        "feedback_message":        "Your feedback helps us improve patient care.",
+    },
+    "University": {
+        "feedback_mode":           "improvement",
+        "reward_enabled":          False,
+        "points_per_feedback":     0,
+        "cooldown_hours":          0,
+        "minimum_feedback_length": 20,
+        "reward_threshold":        0,
+        "reward_description":      "",
+        "feedback_message":        "Help us improve your campus experience.",
+    },
+    "School": {
+        "feedback_mode":           "improvement",
+        "reward_enabled":          False,
+        "points_per_feedback":     0,
+        "cooldown_hours":          0,
+        "minimum_feedback_length": 15,
+        "reward_threshold":        0,
+        "reward_description":      "",
+        "feedback_message":        "Help us improve the learning environment.",
+    },
+    "Bank": {
+        "feedback_mode":           "improvement",
+        "reward_enabled":          False,
+        "points_per_feedback":     0,
+        "cooldown_hours":          0,
+        "minimum_feedback_length": 20,
+        "reward_threshold":        0,
+        "reward_description":      "",
+        "feedback_message":        "Your feedback helps us improve banking services.",
+    },
+    "SaaS": {
+        "feedback_mode":           "product",
+        "reward_enabled":          False,
+        "points_per_feedback":     0,
+        "cooldown_hours":          24,
+        "minimum_feedback_length": 15,
+        "reward_threshold":        0,
+        "reward_description":      "",
+        "feedback_message":        "Your feedback helps shape future product improvements.",
+    },
+    "Mobile App": {
+        "feedback_mode":           "product",
+        "reward_enabled":          False,
+        "points_per_feedback":     0,
+        "cooldown_hours":          24,
+        "minimum_feedback_length": 10,
+        "reward_threshold":        0,
+        "reward_description":      "",
+        "feedback_message":        "Help us improve the app.",
+    },
+}
 
 
 def _get_engagement_mode(industry: str) -> str:
-    """Derive default engagement mode from industry."""
-    if industry in REWARD_INDUSTRIES:
-        return "reward"
-    if industry in IMPROVEMENT_INDUSTRIES:
-        return "improvement"
+    """Derive default engagement mode from INDUSTRY_CONFIG_MAP."""
+    if industry in INDUSTRY_CONFIG_MAP:
+        return INDUSTRY_CONFIG_MAP[industry]["feedback_mode"]
     return "product"
 
 
 def _build_defaults(industry: str) -> dict:
     """
     Returns a dictionary of default settings for a given industry.
-    These are sensible starting points — the business can always override.
+    Configuration-driven without industry-specific code branches everywhere.
     """
-    if industry in REWARD_INDUSTRIES:
+    if industry in INDUSTRY_CONFIG_MAP:
+        return INDUSTRY_CONFIG_MAP[industry].copy()
+
+    # Generic fallback
+    mode = _get_engagement_mode(industry)
+    if mode == "reward":
         return {
             "feedback_mode":           "reward",
             "reward_enabled":          True,
             "points_per_feedback":     10,
-            "cooldown_hours":          168,   # 1 week
+            "cooldown_hours":          168,
             "minimum_feedback_length": 10,
             "reward_threshold":        100,
-            "reward_description":      "Loyalty points redeemable at your next visit",
-            "feedback_message":        f"Share your experience and earn loyalty points!",
+            "reward_description":      "Earn points for your valid feedback.",
+            "feedback_message":        "Earn points for your valid feedback.",
         }
-    if industry in IMPROVEMENT_INDUSTRIES:
+    if mode == "improvement":
         return {
             "feedback_mode":           "improvement",
             "reward_enabled":          False,
             "points_per_feedback":     0,
-            "cooldown_hours":          0,     # No cooldown — institutional context
+            "cooldown_hours":          0,
             "minimum_feedback_length": 20,
             "reward_threshold":        0,
             "reward_description":      "",
-            "feedback_message":        "Your feedback is confidential and helps us serve you better.",
+            "feedback_message":        "Your feedback helps us improve service quality.",
         }
-    # Default: product mode (SaaS, Mobile App, and fallback)
     return {
         "feedback_mode":           "product",
         "reward_enabled":          False,
@@ -72,7 +180,7 @@ def _build_defaults(industry: str) -> dict:
         "minimum_feedback_length": 15,
         "reward_threshold":        0,
         "reward_description":      "",
-        "feedback_message":        "Your feedback directly shapes our product roadmap.",
+        "feedback_message":        "Your feedback helps shape future product improvements.",
     }
 
 
