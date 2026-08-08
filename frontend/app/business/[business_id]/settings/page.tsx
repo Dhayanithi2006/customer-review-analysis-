@@ -100,7 +100,7 @@ export default function WorkspaceSettingsPage() {
     try {
       const updated = await updateFeedbackSettings(businessId, {
         feedback_mode: feedbackMode,
-        reward_enabled: rewardEnabled,
+        reward_enabled: feedbackMode === "reward" ? true : rewardEnabled,
         points_per_feedback: parseInt(pointsPerFeedback) || 10,
         cooldown_hours: parseInt(cooldownHours) || 0,
         minimum_feedback_length: parseInt(minimumFeedbackLength) || 10,
@@ -151,12 +151,21 @@ export default function WorkspaceSettingsPage() {
   const fieldClass =
     "w-full h-11 rounded-[16px] border border-white/[0.08] bg-surface-2 px-3 text-sm text-white outline-none transition-all focus-visible:border-primary focus-visible:shadow-[0_0_0_3px_rgba(109,93,246,0.22)]";
 
+  // Dynamic preview computation
+  const previewHeadline = feedbackMessage.trim() || (
+    feedbackMode === "reward"
+      ? `How was your experience at ${biz.business_name}?`
+      : feedbackMode === "improvement"
+      ? "How was your experience today?"
+      : "How was your experience?"
+  );
+
   return (
     <WorkspacePage width="narrow">
       <PageIntro
         eyebrow="Settings"
         title="Workspace settings"
-        description="Configure feedback engagement modes, reward rules, and revenue impact parameters."
+        description="Configure your customer feedback experience, reward parameters, and revenue impact defaults."
       />
 
       {/* Business Identity */}
@@ -181,156 +190,294 @@ export default function WorkspaceSettingsPage() {
         </div>
       </section>
 
-      {/* Feedback Engagement Settings Editor */}
+      {/* PHASE 6: CUSTOMER FEEDBACK EXPERIENCE CONFIGURATION */}
       <section className="rounded-[20px] border border-border bg-surface p-5 md:p-6 mb-5 card-elevated">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">
-            Feedback Engagement Settings
+            Customer Feedback Experience
           </h2>
-          <span className="text-[10px] text-slate-500 font-mono">
-            Default: {biz.industry}
+          <span className="text-[10px] text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/20 font-semibold">
+            Configured Mode: {feedbackMode.toUpperCase()}
           </span>
         </div>
-        <p className="text-xs text-slate-400 mb-5 leading-relaxed">
-          Customize how feedback is collected from your customers. Industry defaults are pre-applied, but you can override any setting below.
+        <p className="text-xs text-slate-400 mb-6 leading-relaxed">
+          Select how feedback is presented to your customers. Choose the experience mode that best fits your business model.
         </p>
 
-        <div className="space-y-5">
-          {/* Mode Selector */}
-          <div>
-            <Label htmlFor="feedback-mode">Feedback Mode</Label>
-            <div className="grid grid-cols-3 gap-2 mt-1.5">
-              {[
-                { value: "reward", icon: "🎁", label: "Reward Mode", desc: "Points & Incentives" },
-                { value: "improvement", icon: "💬", label: "Improvement Mode", desc: "Trust & Quality" },
-                { value: "product", icon: "🚀", label: "Product Mode", desc: "Roadmap & Features" },
-              ].map((m) => {
-                const active = feedbackMode === m.value;
-                return (
-                  <button
-                    key={m.value}
-                    type="button"
-                    onClick={() => {
-                      setFeedbackMode(m.value as any);
-                      if (m.value === "reward") setRewardEnabled(true);
-                    }}
-                    className={`p-3 rounded-2xl border text-left transition-all ${
-                      active
-                        ? "border-primary bg-primary/10 text-white"
-                        : "border-white/10 bg-surface-2 text-slate-400 hover:border-white/20"
-                    }`}
-                  >
-                    <span className="text-xl block mb-1">{m.icon}</span>
-                    <p className="text-xs font-bold text-slate-200">{m.label}</p>
-                    <p className="text-[10px] text-slate-500">{m.desc}</p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Feedback Message */}
-          <div>
-            <Label htmlFor="feedback-message">Feedback Form Headline / Message</Label>
-            <Input
-              id="feedback-message"
-              type="text"
-              value={feedbackMessage}
-              onChange={(e) => setFeedbackMessage(e.target.value)}
-              placeholder="e.g. Help us serve you better"
-            />
-          </div>
-
-          {/* Core Configuration Parameters */}
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="min-length">Minimum Feedback Length (chars)</Label>
-              <Input
-                id="min-length"
-                type="number"
-                value={minimumFeedbackLength}
-                onChange={(e) => setMinimumFeedbackLength(e.target.value)}
-                min={5}
-                max={500}
-              />
-            </div>
-            <div>
-              <Label htmlFor="cooldown-hours">Cooldown Between Submissions (hours)</Label>
-              <Input
-                id="cooldown-hours"
-                type="number"
-                value={cooldownHours}
-                onChange={(e) => setCooldownHours(e.target.value)}
-                min={0}
-                max={8760}
-              />
-            </div>
-          </div>
-
-          {/* Reward Settings Panel (Conditional or Togglable) */}
-          <div className="pt-3 border-t border-white/8 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label htmlFor="reward-toggle">Reward / Gamification Mechanics</Label>
-                <p className="text-[11px] text-slate-500">Enable points and rewards for customer feedback</p>
-              </div>
-              <input
-                id="reward-toggle"
-                type="checkbox"
-                checked={rewardEnabled}
-                onChange={(e) => setRewardEnabled(e.target.checked)}
-                className="w-5 h-5 accent-primary rounded cursor-pointer"
-              />
-            </div>
-
-            {rewardEnabled && (
-              <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/15 space-y-4">
-                <div className="grid sm:grid-cols-2 gap-4">
+        {/* 1. Mode Selector */}
+        <div className="space-y-4 mb-6">
+          <Label className="text-xs font-bold uppercase tracking-wider text-slate-400">Feedback Mode</Label>
+          <div className="grid sm:grid-cols-3 gap-3">
+            {[
+              {
+                value: "reward",
+                icon: "🎁",
+                title: "Reward Mode",
+                subtitle: "Points & Incentives",
+                desc: "Customers earn loyalty points for submitting valid feedback. Best for transactional businesses (supermarkets, restaurants, hotels).",
+              },
+              {
+                value: "improvement",
+                icon: "💬",
+                title: "Improvement Mode",
+                subtitle: "Trust & Service Quality",
+                desc: "Feedback is framed as helping improve service quality. Professional, confidential, and institutional — no gamification.",
+              },
+              {
+                value: "product",
+                icon: "🚀",
+                title: "Product Mode",
+                subtitle: "Roadmap & Features",
+                desc: "Feedback directly influences your product roadmap. Ideal for SaaS and mobile apps, with category tags.",
+              },
+            ].map((m) => {
+              const active = feedbackMode === m.value;
+              return (
+                <button
+                  key={m.value}
+                  type="button"
+                  onClick={() => {
+                    setFeedbackMode(m.value as any);
+                    if (m.value === "reward") setRewardEnabled(true);
+                  }}
+                  className={`p-4 rounded-2xl border text-left transition-all relative flex flex-col justify-between ${
+                    active
+                      ? "border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/10"
+                      : "border-white/8 bg-surface-2 hover:border-white/20 text-slate-400"
+                  }`}
+                >
                   <div>
-                    <Label htmlFor="points-per-feedback">Points Per Feedback</Label>
-                    <Input
-                      id="points-per-feedback"
-                      type="number"
-                      value={pointsPerFeedback}
-                      onChange={(e) => setPointsPerFeedback(e.target.value)}
-                      min={1}
-                    />
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-2xl">{m.icon}</span>
+                      {active && (
+                        <span className="w-2 h-2 rounded-full bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.8)]" />
+                      )}
+                    </div>
+                    <p className="text-xs font-bold text-slate-100 mb-0.5">{m.title}</p>
+                    <p className="text-[10px] text-indigo-300 font-semibold mb-2">{m.subtitle}</p>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">{m.desc}</p>
                   </div>
-                  <div>
-                    <Label htmlFor="reward-threshold">Reward Threshold (Points)</Label>
-                    <Input
-                      id="reward-threshold"
-                      type="number"
-                      value={rewardThreshold}
-                      onChange={(e) => setRewardThreshold(e.target.value)}
-                      min={1}
-                    />
-                  </div>
-                </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
+        {/* 2. Dynamic Configuration Fields per Mode */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-surface-2 border border-white/8 space-y-4 mb-6">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+            {feedbackMode === "reward" ? "🎁 Reward Mode Settings" : feedbackMode === "improvement" ? "💬 Improvement Mode Settings" : "🚀 Product Mode Settings"}
+          </h3>
+
+          {feedbackMode === "reward" && (
+            <>
+              <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="reward-description">Reward Description</Label>
+                  <Label htmlFor="points-per-feedback">Points per valid feedback</Label>
+                  <Input
+                    id="points-per-feedback"
+                    type="number"
+                    value={pointsPerFeedback}
+                    onChange={(e) => setPointsPerFeedback(e.target.value)}
+                    min={1}
+                    max={10000}
+                    placeholder="10"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">Points credited to customer upon valid submission</p>
+                </div>
+                <div>
+                  <Label htmlFor="cooldown-hours">Reward cooldown (hours)</Label>
+                  <Input
+                    id="cooldown-hours"
+                    type="number"
+                    value={cooldownHours}
+                    onChange={(e) => setCooldownHours(e.target.value)}
+                    min={0}
+                    max={8760}
+                    placeholder="168"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">Hours before same customer token can earn points again</p>
+                </div>
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="min-length">Minimum feedback length (characters)</Label>
+                  <Input
+                    id="min-length"
+                    type="number"
+                    value={minimumFeedbackLength}
+                    onChange={(e) => setMinimumFeedbackLength(e.target.value)}
+                    min={5}
+                    max={500}
+                    placeholder="10"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="reward-description">Reward description</Label>
                   <Input
                     id="reward-description"
                     type="text"
                     value={rewardDescription}
                     onChange={(e) => setRewardDescription(e.target.value)}
-                    placeholder="e.g. Free coffee on your next visit"
+                    placeholder="e.g. Redeem points for discounts on your next visit"
                   />
                 </div>
               </div>
-            )}
+            </>
+          )}
+
+          {feedbackMode === "improvement" && (
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="feedback-message-imp">Feedback Headline / Question</Label>
+                <Input
+                  id="feedback-message-imp"
+                  type="text"
+                  value={feedbackMessage}
+                  onChange={(e) => setFeedbackMessage(e.target.value)}
+                  placeholder="e.g. How was your experience today?"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">Main heading shown to patients or institutional visitors</p>
+              </div>
+              <div>
+                <Label htmlFor="min-length-imp">Minimum feedback length (characters)</Label>
+                <Input
+                  id="min-length-imp"
+                  type="number"
+                  value={minimumFeedbackLength}
+                  onChange={(e) => setMinimumFeedbackLength(e.target.value)}
+                  min={5}
+                  max={500}
+                  placeholder="20"
+                />
+              </div>
+            </div>
+          )}
+
+          {feedbackMode === "product" && (
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="feedback-message-prod">Feedback Headline / Question</Label>
+                <Input
+                  id="feedback-message-prod"
+                  type="text"
+                  value={feedbackMessage}
+                  onChange={(e) => setFeedbackMessage(e.target.value)}
+                  placeholder="e.g. How was your experience? / What should we improve?"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">Main heading shown to app or SaaS users</p>
+              </div>
+              <div>
+                <Label htmlFor="min-length-prod">Minimum feedback length (characters)</Label>
+                <Input
+                  id="min-length-prod"
+                  type="number"
+                  value={minimumFeedbackLength}
+                  onChange={(e) => setMinimumFeedbackLength(e.target.value)}
+                  min={5}
+                  max={500}
+                  placeholder="15"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 3. Live Customer Preview Card ("See what your customers will see") */}
+        <div className="mb-6 space-y-3">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+              <span>📱</span> See what your customers will see
+            </Label>
+            <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded font-mono font-semibold">
+              Live Preview
+            </span>
           </div>
 
-          <div className="flex justify-end pt-2">
-            <Button
-              type="button"
-              onClick={handleSaveFeedbackSettings}
-              disabled={savingFeedbackSettings}
-            >
-              {savingFeedbackSettings ? "Saving Settings..." : feedbackSettingsSaved ? "Saved ✓" : "Save Engagement Settings"}
-            </Button>
+          <div className="p-5 sm:p-6 rounded-3xl bg-[#07080d] border border-white/10 shadow-2xl relative overflow-hidden">
+            {/* Ambient glow */}
+            <div className={`absolute inset-0 bg-gradient-to-br opacity-20 pointer-events-none ${
+              feedbackMode === "reward" ? "from-amber-500/20 to-transparent" :
+              feedbackMode === "improvement" ? "from-cyan-500/20 to-transparent" :
+              "from-indigo-500/20 to-transparent"
+            }`} />
+
+            <div className="relative z-10 space-y-4">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/6 border border-white/10">
+                <span className="text-xs">
+                  {feedbackMode === "reward" ? "🎁" : feedbackMode === "improvement" ? "💬" : "🚀"}
+                </span>
+                <span className="text-[11px] font-bold text-slate-200">{biz.business_name}</span>
+              </div>
+
+              <h4 className="text-base sm:text-lg font-black text-slate-100 leading-tight">
+                {previewHeadline}
+              </h4>
+
+              <p className="text-xs text-slate-400">
+                {feedbackMode === "reward"
+                  ? "Tell us what we can improve. Submit valid feedback to earn loyalty points."
+                  : feedbackMode === "improvement"
+                  ? "Tell us what we can improve. Your feedback is confidential and helps us improve service quality."
+                  : "What should we improve? Your feedback directly shapes future product improvements."}
+              </p>
+
+              {/* Star Rating Simulation */}
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <span key={s} className="text-xl text-amber-400">★</span>
+                ))}
+              </div>
+
+              {/* Product Mode Tags Preview */}
+              {feedbackMode === "product" && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {["Bug", "Feature Request", "Performance", "UX"].map((tag) => (
+                    <span key={tag} className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-indigo-600/30 border border-indigo-500/40 text-indigo-200">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Reward Promise Preview */}
+              {feedbackMode === "reward" && (
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                  <span className="text-xl">🎁</span>
+                  <div className="text-[11px] text-amber-300">
+                    <p className="font-bold">Earn {pointsPerFeedback || 10} loyalty points</p>
+                    <p className="text-amber-400/80 text-[10px]">
+                      {rewardDescription || "Redeem points for discounts or special rewards on your next visit."}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Submit CTA Button Simulation */}
+              <div className="pt-2">
+                <div className={`w-full py-3 rounded-xl text-xs font-bold text-center ${
+                  feedbackMode === "reward"
+                    ? "bg-amber-500 text-black"
+                    : feedbackMode === "improvement"
+                    ? "bg-cyan-600 text-white"
+                    : "bg-indigo-600 text-white"
+                }`}>
+                  {feedbackMode === "reward" ? "🎁 Submit & Claim Points" : "Submit Feedback"}
+                </div>
+              </div>
+            </div>
           </div>
+        </div>
+
+        <div className="flex justify-end pt-2">
+          <Button
+            type="button"
+            onClick={handleSaveFeedbackSettings}
+            disabled={savingFeedbackSettings}
+          >
+            {savingFeedbackSettings ? "Saving Settings..." : feedbackSettingsSaved ? "Saved ✓" : "Save Feedback Experience Settings"}
+          </Button>
         </div>
       </section>
 
@@ -425,6 +572,7 @@ export default function WorkspaceSettingsPage() {
           {[
             { label: "Dashboard URL", value: biz.dashboard_url },
             { label: "Feedback URL", value: biz.feedback_url },
+            { label: "Public Updates (You Said → We Did)", value: `${biz.feedback_url}/updates` },
           ].map((f) => (
             <div key={f.label}>
               <p className="text-[10px] text-slate-600 uppercase tracking-wider mb-1.5 font-semibold">
