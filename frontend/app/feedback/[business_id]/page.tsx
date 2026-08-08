@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
-// ── Engagement mode styling & icons ──────────────────────────────────────────
+// ── Engagement mode themes & copywriting ──────────────────────────────────────
 const MODE_THEMES = {
   reward: {
     gradient: "from-amber-500/10 via-orange-500/5 to-transparent",
@@ -12,18 +12,18 @@ const MODE_THEMES = {
     ratingLabel: "How was your experience?",
     textPlaceholder: "Tell us what we can improve...",
     namePrompt: "Your name (optional)",
-    ctaLabel: "Submit Feedback",
-    ctaClass: "bg-amber-500 hover:bg-amber-400 text-black",
+    ctaLabel: "Submit Feedback & Earn Points",
+    ctaClass: "bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20",
   },
   improvement: {
     gradient: "from-cyan-500/8 via-blue-500/5 to-transparent",
     accent:   "cyan",
     icon:     "💬",
     ratingLabel: "How was your experience today?",
-    textPlaceholder: "Tell us what we can improve. All feedback is confidential.",
+    textPlaceholder: "Tell us how we can serve you better. All feedback is confidential.",
     namePrompt: "Your name (optional)",
     ctaLabel: "Submit Feedback",
-    ctaClass: "bg-cyan-600 hover:bg-cyan-500 text-white",
+    ctaClass: "bg-cyan-600 hover:bg-cyan-500 text-white shadow-lg shadow-cyan-600/20",
   },
   product: {
     gradient: "from-indigo-500/10 via-violet-500/5 to-transparent",
@@ -32,8 +32,8 @@ const MODE_THEMES = {
     ratingLabel: "How was your experience?",
     textPlaceholder: "What should we improve? What feature would you like to see next?",
     namePrompt: "Your name (optional)",
-    ctaLabel: "Submit Feedback",
-    ctaClass: "bg-indigo-600 hover:bg-indigo-500 text-white",
+    ctaLabel: "Submit Product Feedback",
+    ctaClass: "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20",
   },
 } as const;
 
@@ -74,7 +74,7 @@ function StarRatingInput({ value, onChange }: { value: number; onChange: (v: num
             onClick={() => onChange(star)}
             onMouseEnter={() => setHovered(star)}
             onMouseLeave={() => setHovered(0)}
-            className={`text-4xl sm:text-5xl transition-all duration-100 ${
+            className={`text-4xl sm:text-5xl transition-all duration-150 ${
               star <= (hovered || value) ? "text-amber-400 scale-110" : "text-slate-700 hover:scale-105"
             }`}
           >
@@ -83,7 +83,7 @@ function StarRatingInput({ value, onChange }: { value: number; onChange: (v: num
         ))}
       </div>
       {(hovered || value) > 0 && (
-        <p className="text-sm font-semibold text-amber-400 h-5">
+        <p className="text-xs font-bold text-amber-400 h-4 tracking-wide">
           {labels[hovered || value]}
         </p>
       )}
@@ -96,12 +96,13 @@ export default function FeedbackFormPage() {
   const router     = useRouter();
   const businessId = params.business_id as string;
 
-  const [config, setConfig]     = useState<FormConfig | null>(null);
-  const [loading, setLoading]   = useState(true);
-  const [notFound, setNotFound] = useState(false);
+  const [config, setConfig]         = useState<FormConfig | null>(null);
+  const [loading, setLoading]       = useState(true);
+  const [notFound, setNotFound]     = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg]     = useState<string | null>(null);
 
-  // Form fields
+  // Form inputs
   const [text, setText]           = useState("");
   const [rating, setRating]       = useState(0);
   const [name, setName]           = useState("");
@@ -109,7 +110,8 @@ export default function FeedbackFormPage() {
   const [selectedTag, setSelectedTag] = useState("");
   const [charCount, setCharCount] = useState(0);
 
-  const [userToken, setUserToken] = useState<string>("");
+  const [userToken, setUserToken]   = useState<string>("");
+  const [inCooldown, setInCooldown] = useState(false);
 
   useEffect(() => {
     // Generate or retrieve anonymous user_token from localStorage
@@ -125,12 +127,32 @@ export default function FeedbackFormPage() {
     }
     setUserToken(token);
 
+    // Fetch public form config
     fetch(`${API}/feedback/${businessId}`)
       .then(r => {
         if (r.status === 404) { setNotFound(true); return null; }
         return r.json();
       })
-      .then(data => { if (data) setConfig(data); })
+      .then(data => {
+        if (data) {
+          setConfig(data);
+          // Check reward eligibility / cooldown status if in reward mode
+          if (data.engagement_mode === "reward" && token) {
+            fetch(`${API}/${businessId}/reward/eligibility`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ user_token: token })
+            })
+              .then(res => res.json())
+              .then(el => {
+                if (el && el.reason === "cooldown_active") {
+                  setInCooldown(true);
+                }
+              })
+              .catch(() => null);
+          }
+        }
+      })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [businessId]);
@@ -141,9 +163,16 @@ export default function FeedbackFormPage() {
     e.preventDefault();
     if (!config || submitting) return;
 
+    setErrorMsg(null);
     const trimmed = text.trim();
-    if (trimmed.length < minChars) return;
-    if (config.requires_rating && rating === 0) return;
+    if (trimmed.length < minChars) {
+      setErrorMsg(`Please enter at least ${minChars} characters.`);
+      return;
+    }
+    if (config.requires_rating && rating === 0) {
+      setErrorMsg("Please select a star rating.");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -175,30 +204,35 @@ export default function FeedbackFormPage() {
         }
         router.push(`/feedback/${businessId}/success?${queryParams.toString()}`);
       } else {
-        alert(resData.detail || "Submission failed. Please try again.");
+        setErrorMsg(resData.detail || "Submission failed. Please try again.");
       }
     } catch {
-      alert("Sorry, something went wrong. Please try again.");
+      setErrorMsg("Connection error. Please check your internet connection and try again.");
     } finally {
       setSubmitting(false);
     }
   };
 
   if (loading) return (
-    <div className="min-h-screen bg-[#07080d] flex items-center justify-center">
-      <div className="flex flex-col items-center gap-3">
-        <div className="w-8 h-8 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
-        <p className="text-xs text-slate-500">Loading feedback form…</p>
+    <div className="min-h-screen bg-[#07080d] flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-[#0d0f1a] border border-white/8 rounded-3xl p-8 space-y-6 text-center animate-pulse">
+        <div className="w-12 h-12 rounded-full bg-white/10 mx-auto" />
+        <div className="h-6 w-3/4 bg-white/10 rounded-lg mx-auto" />
+        <div className="h-4 w-1/2 bg-white/5 rounded mx-auto" />
+        <div className="h-32 bg-white/5 rounded-2xl" />
+        <div className="h-12 bg-white/10 rounded-2xl" />
       </div>
     </div>
   );
 
   if (notFound || !config) return (
     <div className="min-h-screen bg-[#07080d] flex items-center justify-center p-6">
-      <div className="max-w-md w-full text-center">
-        <p className="text-5xl mb-4">😕</p>
-        <h1 className="text-xl font-bold text-slate-100 mb-2">Form Not Found</h1>
-        <p className="text-sm text-slate-400">This feedback link has expired or is invalid. Please ask the business for a new QR code.</p>
+      <div className="max-w-md w-full text-center space-y-4">
+        <p className="text-5xl">📱</p>
+        <h1 className="text-xl font-bold text-slate-100">Feedback Form Unavailable</h1>
+        <p className="text-xs text-slate-400 leading-relaxed">
+          This feedback QR link could not be loaded. Please ask the staff for an updated QR code or link.
+        </p>
       </div>
     </div>
   );
@@ -208,43 +242,53 @@ export default function FeedbackFormPage() {
   const isValid = text.trim().length >= minChars && (!config.requires_rating || rating > 0);
 
   return (
-    <div className="min-h-screen bg-[#07080d] relative">
+    <div className="min-h-screen bg-[#07080d] relative text-slate-100 select-none">
       {/* Ambient background gradient */}
       <div className={`fixed inset-0 bg-gradient-to-br ${theme.gradient} pointer-events-none`} />
 
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 py-8 sm:py-12">
         <div className="w-full max-w-md sm:max-w-lg">
 
-          {/* Business Brand Header */}
-          <div className="text-center mb-6 sm:mb-8">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/6 border border-white/10 mb-4">
+          {/* Business Brand Header (Understandable in 3 Seconds) */}
+          <div className="text-center mb-6 sm:mb-8 space-y-2">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/6 border border-white/10 shadow-sm">
               <span className="text-sm">{theme.icon}</span>
-              <span className="text-[12px] font-bold text-slate-200">{config.business_name}</span>
+              <span className="text-xs font-bold text-slate-200">{config.business_name}</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-slate-100 mb-2 leading-tight">
+
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-100">
               {config.mode_headline}
             </h1>
+
             <p className="text-xs sm:text-sm text-slate-400 leading-relaxed max-w-sm mx-auto">
               {config.mode_subtext}
             </p>
           </div>
 
-          {/* Customer Feedback Card */}
+          {/* Form Container */}
           <form onSubmit={handleSubmit} className="bg-[#0d0f1a]/95 border border-white/10 rounded-3xl p-5 sm:p-8 backdrop-blur-xl shadow-2xl space-y-5 sm:space-y-6">
 
-            {/* Rating Stars */}
+            {/* Error Banner */}
+            {errorMsg && (
+              <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/25 text-xs text-red-300 font-semibold flex items-center justify-between">
+                <span>{errorMsg}</span>
+                <button type="button" onClick={() => setErrorMsg(null)} className="text-red-400 hover:text-white">✕</button>
+              </div>
+            )}
+
+            {/* Star Rating Input */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 text-center">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3 text-center">
                 {theme.ratingLabel}
                 {config.requires_rating && <span className="text-amber-400 ml-1">*</span>}
               </label>
               <StarRatingInput value={rating} onChange={setRating} />
             </div>
 
-            {/* PRODUCT MODE: Optional tag selector */}
+            {/* PRODUCT MODE: Optional Tag Selector */}
             {config.show_tag_selector && (
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
                   Category (optional)
                 </label>
                 <div className="flex flex-wrap gap-2">
@@ -255,7 +299,7 @@ export default function FeedbackFormPage() {
                       onClick={() => setSelectedTag(selectedTag === tag ? "" : tag)}
                       className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
                         selectedTag === tag
-                          ? "bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20"
+                          ? "bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-500/20"
                           : "border-white/10 text-slate-400 hover:border-white/20 hover:text-slate-200"
                       }`}
                     >
@@ -266,13 +310,13 @@ export default function FeedbackFormPage() {
               </div>
             )}
 
-            {/* Main Feedback Text Area */}
+            {/* Main Feedback Textarea */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
                   Tell us what we can improve <span className="text-amber-400">*</span>
                 </label>
-                <span className={`text-[10px] font-mono ${charCount >= minChars ? "text-emerald-400" : "text-slate-600"}`}>
+                <span className={`text-[10px] font-mono font-semibold ${charCount >= minChars ? "text-emerald-400" : "text-slate-500"}`}>
                   {charCount}/{minChars} min
                 </span>
               </div>
@@ -288,9 +332,9 @@ export default function FeedbackFormPage() {
               />
             </div>
 
-            {/* Optional Customer Name */}
+            {/* Optional Customer Name Input */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
                 {theme.namePrompt}
               </label>
               <input
@@ -303,8 +347,8 @@ export default function FeedbackFormPage() {
               />
             </div>
 
-            {/* REWARD MODE Banner */}
-            {config.show_reward_promise && config.reward_enabled && (
+            {/* REWARD MODE Banner (Secondary to feedback request) */}
+            {config.show_reward_promise && config.reward_enabled && !inCooldown && (
               <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20">
                 <span className="text-2xl shrink-0">🎁</span>
                 <div className="text-[11px] text-amber-300 leading-relaxed">
@@ -316,6 +360,15 @@ export default function FeedbackFormPage() {
               </div>
             )}
 
+            {/* REWARD MODE Cooldown Notice */}
+            {inCooldown && (
+              <div className="p-3 rounded-2xl bg-white/5 border border-white/10 text-center">
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  💡 <strong>Reward cooldown active.</strong> You can still share your feedback anytime to help us improve!
+                </p>
+              </div>
+            )}
+
             {/* Submit Button */}
             <button
               type="submit"
@@ -323,21 +376,21 @@ export default function FeedbackFormPage() {
               className={`w-full py-3.5 sm:py-4 rounded-2xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${theme.ctaClass} disabled:opacity-40 disabled:cursor-not-allowed`}
             >
               {submitting ? (
-                <><div className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin" /> Submitting…</>
+                <><div className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin" /> Submitting Feedback…</>
               ) : (
                 <>{theme.icon} {theme.ctaLabel}</>
               )}
             </button>
 
             <p className="text-center text-[10px] text-slate-500 leading-relaxed">
-              Your feedback goes directly to {config.business_name}. No spam. No public posting.
+              Your feedback goes directly to {config.business_name}. No spam. Confidential & secure.
             </p>
 
           </form>
 
           {/* Simple Clean Footer */}
           <p className="text-center text-[10px] text-slate-600 mt-6">
-            Provided by <span className="text-slate-400 font-semibold">{config.business_name}</span>
+            Powered by <span className="text-slate-400 font-semibold">{config.business_name}</span>
           </p>
         </div>
       </div>
