@@ -125,6 +125,12 @@ function SuccessContent() {
 
           <div className="flex flex-col gap-3">
             <Link
+              href={`/feedback/${businessId}/updates`}
+              className="w-full py-3.5 rounded-2xl text-sm font-bold border border-white/15 bg-white/5 hover:bg-white/10 text-slate-200 transition-all text-center no-underline flex items-center justify-center gap-2"
+            >
+              <span>📣</span> See Actions Taken (You Said → We Did)
+            </Link>
+            <Link
               href={`/feedback/${businessId}`}
               className={`w-full py-3.5 rounded-2xl text-sm font-bold transition-all text-center no-underline ${
                 config.color === "amber" ? "bg-amber-500 hover:bg-amber-400 text-black" :
