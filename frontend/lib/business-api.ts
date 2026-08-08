@@ -13,6 +13,7 @@ export interface BusinessResponse {
   qr_code: string | null;
   feedback_type: "qr" | "digital";
   feedback_method: string;
+  engagement_mode: "reward" | "improvement" | "product";  // Feedback Engagement Layer
   monthly_customers: number;
   avg_revenue_per_user: number;
   premium_pct: number;
@@ -118,4 +119,51 @@ export async function getBusinessReviews(businessId: string, limit = 50, offset 
   const res = await fetch(`${BASE_URL}/business/${businessId}/reviews?limit=${limit}&offset=${offset}`);
   if (!res.ok) throw new Error("Failed to load reviews");
   return res.json();
+}
+
+// ── Feedback Engagement Layer ─────────────────────────────────────────────────
+
+export interface FeedbackSubmission {
+  id: string;
+  raw_text: string;
+  rating: number | null;
+  engagement_mode: string;
+  feedback_tag: string | null;
+  submitted_at: string;
+}
+
+export interface PendingSubmissionsResponse {
+  business_id: string;
+  business_name: string;
+  total_pending: number;
+  total_all_time: number;
+  samples: FeedbackSubmission[];
+  ready_to_analyse: boolean;
+  message: string;
+}
+
+export async function getPendingSubmissions(businessId: string): Promise<PendingSubmissionsResponse> {
+  const res = await fetch(`${BASE_URL}/feedback/${businessId}/pending`);
+  if (!res.ok) throw new Error("Failed to load pending submissions");
+  return res.json();
+}
+
+export async function processSubmissions(businessId: string): Promise<{
+  success: boolean;
+  session_id: string | null;
+  total_processed: number;
+  message: string;
+  status_url?: string;
+  workspace_url?: string;
+}> {
+  const res = await fetch(`${BASE_URL}/feedback/${businessId}/process`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || "Processing failed");
+  }
+  toast.success("Analysis started!", `Processing ${data.total_processed} form submissions.`);
+  return data;
 }

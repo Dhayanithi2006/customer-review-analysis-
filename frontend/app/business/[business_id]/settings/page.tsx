@@ -122,6 +122,40 @@ export default function WorkspaceSettingsPage() {
         </div>
       </section>
 
+      {/* Feedback Engagement Mode */}
+      {(() => {
+        const mode = (biz.engagement_mode || "product") as string;
+        const modeConfig: Record<string, { icon: string; title: string; desc: string; border: string; bg: string }> = {
+          reward:      { icon: "🎁", title: "Reward Mode",      desc: "Customers earn loyalty points for submitting feedback. Best for transactional businesses.",              border: "border-amber-500/25",  bg: "bg-amber-500/8" },
+          improvement: { icon: "💬", title: "Improvement Mode", desc: "Feedback framed as helping improve the service. Professional tone — no gamification.",                    border: "border-cyan-500/25",   bg: "bg-cyan-500/8"  },
+          product:     { icon: "🚀", title: "Product Mode",     desc: "Feedback influences the product roadmap. Includes category tags: Bug, Feature Request, Performance.", border: "border-indigo-500/25", bg: "bg-indigo-500/8" },
+        };
+        const cfg = modeConfig[mode] || modeConfig["product"];
+        return (
+          <section className="rounded-[20px] border border-border bg-surface p-5 md:p-6 mb-5 card-elevated">
+            <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500 mb-4">Feedback Engagement Mode</h2>
+            <div className={`flex items-start gap-3 p-4 rounded-2xl border ${cfg.border} ${cfg.bg}`}>
+              <span className="text-2xl shrink-0">{cfg.icon}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-slate-100 mb-1">{cfg.title}</p>
+                <p className="text-xs text-slate-400 leading-relaxed mb-3">{cfg.desc}</p>
+                <div className="flex gap-2 flex-wrap">
+                  <a href={biz.feedback_url} target="_blank" rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/10 text-slate-300 text-xs font-semibold hover:border-white/25 transition-colors no-underline">
+                    🔗 Preview Form
+                  </a>
+                  <button onClick={() => copyValue("feedback_url", biz.feedback_url)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/10 text-slate-400 text-xs font-semibold hover:border-white/25 transition-colors">
+                    {copied === "feedback_url" ? "✓ Copied" : "📋 Copy URL"}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-600 mt-3">Automatically determined by your industry: {biz.industry}</p>
+          </section>
+        );
+      })()}
+
       <section className="rounded-[20px] border border-border bg-surface p-5 md:p-6 mb-5 card-elevated">
         <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500 mb-1">
           Revenue settings

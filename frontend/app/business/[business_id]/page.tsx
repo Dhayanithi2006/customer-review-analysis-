@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getLatestAnalysis, getBusinessAnalyses } from "@/lib/business-api";
-import type { LatestAnalysisResponse, AnalysisVersion } from "@/lib/business-api";
+import { getLatestAnalysis, getBusinessAnalyses, getPendingSubmissions, processSubmissions } from "@/lib/business-api";
+import type { LatestAnalysisResponse, AnalysisVersion, PendingSubmissionsResponse } from "@/lib/business-api";
 import { getDashboard } from "@/lib/api";
 import type { DashboardData } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -110,10 +110,12 @@ export default function WorkspaceOverviewPage() {
   const params = useParams();
   const businessId = params.business_id as string;
 
-  const [latest, setLatest] = useState<LatestAnalysisResponse | null>(null);
-  const [history, setHistory] = useState<AnalysisVersion[]>([]);
+  const [latest, setLatest]     = useState<LatestAnalysisResponse | null>(null);
+  const [history, setHistory]   = useState<AnalysisVersion[]>([]);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [pending, setPending]   = useState<PendingSubmissionsResponse | null>(null);
+  const [loading, setLoading]   = useState(true);
+  const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -133,6 +135,14 @@ export default function WorkspaceOverviewPage() {
             /* ok */
           }
         }
+
+        // Load pending form submissions (best-effort — table may not exist yet)
+        try {
+          const pend = await getPendingSubmissions(businessId);
+          setPending(pend);
+        } catch {
+          /* table not yet migrated — silent */
+        }
       } catch {
         /* ok */
       } finally {
@@ -141,6 +151,21 @@ export default function WorkspaceOverviewPage() {
     };
     load();
   }, [businessId]);
+
+  const handleProcessSubmissions = async () => {
+    if (processing) return;
+    setProcessing(true);
+    try {
+      await processSubmissions(businessId);
+      // Refresh pending count
+      const pend = await getPendingSubmissions(businessId);
+      setPending(pend);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Processing failed");
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -173,6 +198,54 @@ export default function WorkspaceOverviewPage() {
           </div>
         }
       />
+
+      {/* Pending form submissions panel — Feedback Engagement Layer */}
+      {pending && pending.total_all_time > 0 && (
+        <div className={`rounded-[20px] border p-5 mb-8 flex items-start gap-4 ${
+          pending.ready_to_analyse
+            ? "border-indigo-500/25 bg-indigo-500/5"
+            : "border-white/8 bg-[#0d0f1a]"
+        }`}>
+          <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-indigo-500/15 border border-indigo-500/25 text-lg">
+            📬
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <p className="text-sm font-bold text-slate-100">
+                  {pending.total_pending > 0
+                    ? `${pending.total_pending} new form submission${pending.total_pending !== 1 ? "s" : ""} pending`
+                    : "All submissions processed"}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">{pending.message}</p>
+              </div>
+              {pending.ready_to_analyse && (
+                <button
+                  onClick={handleProcessSubmissions}
+                  disabled={processing}
+                  className="shrink-0 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {processing ? (
+                    <><div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Running…</>
+                  ) : "⚡ Analyse Now"}
+                </button>
+              )}
+            </div>
+            <div className="mt-3 flex gap-1">
+              {Array.from({ length: Math.min(pending.total_all_time, 20) }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-1.5 rounded-full flex-1 ${
+                    i < (pending.total_all_time - pending.total_pending)
+                      ? "bg-emerald-500/60"
+                      : "bg-indigo-500/40"
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Empty / running state */}
       {!hasAnalysis && (

@@ -43,6 +43,20 @@ QR_BASED_INDUSTRIES = {"Hospital", "School", "Hostel", "Supermarket", "Restauran
 # Industries that use digital/app-based ingestion
 DIGITAL_INDUSTRIES = {"Mobile App", "SaaS", "E-commerce"}
 
+# Feedback Engagement Layer — Mode Classification
+REWARD_INDUSTRIES      = {"Supermarket", "Hotel", "Restaurant", "E-commerce", "Hostel"}
+IMPROVEMENT_INDUSTRIES = {"Hospital", "School", "Bank"}
+PRODUCT_INDUSTRIES     = {"Mobile App", "SaaS"}
+
+
+def _derive_engagement_mode(industry: str) -> str:
+    """Pure function — derives engagement mode from industry type."""
+    if industry in REWARD_INDUSTRIES:
+        return "reward"
+    if industry in IMPROVEMENT_INDUSTRIES:
+        return "improvement"
+    return "product"
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Request / Response Schemas
@@ -96,6 +110,7 @@ class BusinessResponse(BaseModel):
     qr_code: Optional[str]
     feedback_type: str          # "qr" | "digital"
     feedback_method: str        # How they currently collect feedback
+    engagement_mode: str        # "reward" | "improvement" | "product"
     monthly_customers: int
     avg_revenue_per_user: float
     premium_pct: float
@@ -136,16 +151,18 @@ def _generate_qr_base64(url: str) -> Optional[str]:
 
 
 def _build_response(row: dict, feedback_type: str) -> BusinessResponse:
+    industry = row["industry"]
     return BusinessResponse(
         id=row["id"],
         business_name=row["business_name"],
-        industry=row["industry"],
+        industry=industry,
         email=row["email"],
         feedback_url=row["feedback_url"],
         dashboard_url=row.get("dashboard_url") or f"{APP_BASE_URL}/business/{row['id']}",
         qr_code=row.get("qr_code"),
         feedback_type=feedback_type,
         feedback_method=row.get("feedback_method") or "none",
+        engagement_mode=row.get("engagement_mode") or _derive_engagement_mode(industry),
         monthly_customers=row.get("monthly_customers") or 500,
         avg_revenue_per_user=float(row.get("avg_revenue_per_user") or 500.0),
         premium_pct=float(row.get("premium_pct") or 20.0),
